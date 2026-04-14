@@ -1296,15 +1296,16 @@ document.querySelectorAll('.settings-tab').forEach(tab=>tab.addEventListener('cl
 }));
 
 function renderSettingsModal(){
-  const body=document.getElementById('settings-body');body.innerHTML='';
-  if(activeSettingsTab==='members') renderMembersSettings(body);
-  else if(activeSettingsTab==='categories') renderCategoriesSettings(body);
-  else if(activeSettingsTab==='statuses') renderStatusesSettings(body);
-  else if(activeSettingsTab==='priorities') renderPrioritiesSettings(body);
+  if(activeSettingsTab==='members') renderMembersSettings();
+  else if(activeSettingsTab==='categories') renderCategoriesSettings();
+  else if(activeSettingsTab==='statuses') renderStatusesSettings();
+  else if(activeSettingsTab==='priorities') renderPrioritiesSettings();
 }
 
-function renderMembersSettings(body){
+function renderMembersSettings(){
+  const body=document.getElementById('settings-body');
   body.innerHTML='';
+  // Member list
   const list=document.createElement('div');list.className='settings-list';
   MEMBERS.forEach((m,i)=>{
     const row=document.createElement('div');row.className='settings-row';
@@ -1313,12 +1314,13 @@ function renderMembersSettings(body){
     const av=document.createElement('div');av.style.cssText=`width:24px;height:24px;border-radius:50%;background:${m.color};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#fff;flex-shrink:0;`;
     av.textContent=initials(m.name);
     const nm=document.createElement('input');nm.className='s-name';nm.value=m.name;
-    nm.addEventListener('change',()=>{m.name=nm.value.trim()||m.name;saveMember(m);renderMembersSettings(body.parentElement?body:document.getElementById('settings-body'));buildHeaderAvatars();buildLabels();buildTimeline();buildOwnerFilter();});
+    nm.addEventListener('change',()=>{m.name=nm.value.trim()||m.name;saveMember(m);renderMembersSettings();buildHeaderAvatars();buildLabels();buildTimeline();buildOwnerFilter();});
     const del=document.createElement('button');del.className='s-del';del.textContent='✕';
-    del.addEventListener('click',()=>{const delId=m.id;MEMBERS.splice(i,1);deleteMember(delId);renderMembersSettings(document.getElementById('settings-body'));buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();});
+    del.addEventListener('click',()=>{const delId=m.id;MEMBERS.splice(i,1);deleteMember(delId);renderMembersSettings();buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();});
     row.append(col,av,nm,del);list.appendChild(row);
   });
   body.appendChild(list);
+  // Add new member (single row at bottom)
   const addRow=document.createElement('div');addRow.className='settings-add';
   const inp=document.createElement('input');inp.type='text';inp.placeholder='新成員名稱';
   const colInp=document.createElement('input');colInp.type='color';colInp.value='#5b9cf6';colInp.style.cssText='width:32px;height:28px;padding:2px;border-radius:4px;border:1px solid var(--border);cursor:pointer;';
@@ -1327,28 +1329,27 @@ function renderMembersSettings(body){
     const name=inp.value.trim();if(!name)return;
     const newMem={id:'U'+Date.now().toString(36),name,color:colInp.value};
     MEMBERS.push(newMem);saveMember(newMem);
-    inp.value='';
-    renderMembersSettings(document.getElementById('settings-body'));buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();
+    renderMembersSettings();buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();
   });
   addRow.append(inp,colInp,btn);body.appendChild(addRow);
 }
 
-function renderCategoriesSettings(body){
-  body.innerHTML='';
+function renderCategoriesSettings(){
+  const body=document.getElementById('settings-body');body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   REPORT_TYPES.forEach((rt,i)=>{
     const row=document.createElement('div');row.className='settings-row';
     const col=document.createElement('input');col.type='color';col.className='s-color';col.value=rt.color;
-    col.addEventListener('change',()=>{rt.color=col.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();});
+    col.addEventListener('change',()=>{rt.color=col.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings();buildTimeline();});
     const swatch=document.createElement('div');swatch.style.cssText=`padding:2px 6px;border-radius:8px;font-size:9px;font-weight:600;background:${rt.bg};color:${rt.color};border:1px solid ${rt.border};flex-shrink:0;`;swatch.textContent=rt.label;
     const nm=document.createElement('input');nm.className='s-name';nm.value=rt.label;
-    nm.addEventListener('change',()=>{rt.label=nm.value.trim()||rt.label;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();buildSelects();});
+    nm.addEventListener('change',()=>{rt.label=nm.value.trim()||rt.label;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings();buildTimeline();buildSelects();});
     const bgInp=document.createElement('input');bgInp.type='color';bgInp.className='s-color';bgInp.value=rt.bg;bgInp.title='背景色';
-    bgInp.addEventListener('change',()=>{rt.bg=bgInp.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();});
+    bgInp.addEventListener('change',()=>{rt.bg=bgInp.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings();buildTimeline();});
     const borderInp=document.createElement('input');borderInp.type='color';borderInp.className='s-color';borderInp.value=rt.border;borderInp.title='邊框色';
-    borderInp.addEventListener('change',()=>{rt.border=borderInp.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();});
+    borderInp.addEventListener('change',()=>{rt.border=borderInp.value;saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings();buildTimeline();});
     const del=document.createElement('button');del.className='s-del';del.textContent='✕';
-    del.addEventListener('click',()=>{if(REPORT_TYPES.length<=1)return;REPORT_TYPES.splice(i,1);saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();buildSelects();});
+    del.addEventListener('click',()=>{if(REPORT_TYPES.length<=1)return;REPORT_TYPES.splice(i,1);saveSettings('reportTypes',REPORT_TYPES);renderCategoriesSettings();buildTimeline();buildSelects();});
     row.append(col,swatch,nm,bgInp,borderInp,del);list.appendChild(row);
   });
   body.appendChild(list);
@@ -1362,26 +1363,25 @@ function renderCategoriesSettings(body){
     const c=colInp.value;
     REPORT_TYPES.push({id,label,color:c,bg:c+'1a',border:c+'66'});
     saveSettings('reportTypes',REPORT_TYPES);
-    inp.value='';
-    renderCategoriesSettings(document.getElementById('settings-body'));buildTimeline();buildSelects();
+    renderCategoriesSettings();buildTimeline();buildSelects();
   });
   addRow.append(inp,colInp,btn);body.appendChild(addRow);
 }
 
-function renderStatusesSettings(body){
-  body.innerHTML='';
+function renderStatusesSettings(){
+  const body=document.getElementById('settings-body');body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   PROJECT_STATUSES.forEach((st,i)=>{
     const row=document.createElement('div');row.className='settings-row';
     const col=document.createElement('input');col.type='color';col.className='s-color';col.value=st.color;
-    col.addEventListener('change',()=>{st.color=col.value;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings(document.getElementById('settings-body'));});
+    col.addEventListener('change',()=>{st.color=col.value;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings();});
     const swatch=document.createElement('div');swatch.className='dash-status';swatch.style.cssText=`background:${st.bg};color:${st.color};`;swatch.textContent=st.label;
     const nm=document.createElement('input');nm.className='s-name';nm.value=st.label;
-    nm.addEventListener('change',()=>{st.label=nm.value.trim()||st.label;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings(document.getElementById('settings-body'));});
+    nm.addEventListener('change',()=>{st.label=nm.value.trim()||st.label;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings();});
     const bgInp=document.createElement('input');bgInp.type='color';bgInp.className='s-color';bgInp.value=st.bg;bgInp.title='背景色';
-    bgInp.addEventListener('change',()=>{st.bg=bgInp.value;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings(document.getElementById('settings-body'));});
+    bgInp.addEventListener('change',()=>{st.bg=bgInp.value;saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings();});
     const del=document.createElement('button');del.className='s-del';del.textContent='✕';
-    del.addEventListener('click',()=>{PROJECT_STATUSES.splice(i,1);saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings(document.getElementById('settings-body'));});
+    del.addEventListener('click',()=>{PROJECT_STATUSES.splice(i,1);saveSettings('projectStatuses',PROJECT_STATUSES);renderStatusesSettings();});
     row.append(col,swatch,nm,bgInp,del);list.appendChild(row);
   });
   body.appendChild(list);
@@ -1394,26 +1394,25 @@ function renderStatusesSettings(body){
     const id='st'+Date.now().toString(36);
     PROJECT_STATUSES.push({id,label,color:colInp.value,bg:colInp.value+'1a'});
     saveSettings('projectStatuses',PROJECT_STATUSES);
-    inp.value='';
-    renderStatusesSettings(document.getElementById('settings-body'));
+    renderStatusesSettings();
   });
   addRow.append(inp,colInp,btn);body.appendChild(addRow);
 }
 
-function renderPrioritiesSettings(body){
-  body.innerHTML='';
+function renderPrioritiesSettings(){
+  const body=document.getElementById('settings-body');body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   PRIORITIES.forEach((pr,i)=>{
     const row=document.createElement('div');row.className='settings-row';
     const col=document.createElement('input');col.type='color';col.className='s-color';col.value=pr.color;
-    col.addEventListener('change',()=>{pr.color=col.value;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings(document.getElementById('settings-body'));});
+    col.addEventListener('change',()=>{pr.color=col.value;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings();});
     const swatch=document.createElement('div');swatch.className='dash-status';swatch.style.cssText=`background:${pr.bg};color:${pr.color};`;swatch.textContent=pr.label;
     const nm=document.createElement('input');nm.className='s-name';nm.value=pr.label;
-    nm.addEventListener('change',()=>{pr.label=nm.value.trim()||pr.label;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings(document.getElementById('settings-body'));});
+    nm.addEventListener('change',()=>{pr.label=nm.value.trim()||pr.label;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings();});
     const bgInp=document.createElement('input');bgInp.type='color';bgInp.className='s-color';bgInp.value=pr.bg;bgInp.title='背景色';
-    bgInp.addEventListener('change',()=>{pr.bg=bgInp.value;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings(document.getElementById('settings-body'));});
+    bgInp.addEventListener('change',()=>{pr.bg=bgInp.value;saveSettings('priorities',PRIORITIES);renderPrioritiesSettings();});
     const del=document.createElement('button');del.className='s-del';del.textContent='✕';
-    del.addEventListener('click',()=>{PRIORITIES.splice(i,1);saveSettings('priorities',PRIORITIES);renderPrioritiesSettings(document.getElementById('settings-body'));});
+    del.addEventListener('click',()=>{PRIORITIES.splice(i,1);saveSettings('priorities',PRIORITIES);renderPrioritiesSettings();});
     row.append(col,swatch,nm,bgInp,del);list.appendChild(row);
   });
   body.appendChild(list);
@@ -1426,8 +1425,7 @@ function renderPrioritiesSettings(body){
     const id='pri'+Date.now().toString(36);
     PRIORITIES.push({id,label,color:colInp.value,bg:colInp.value+'1a',border:colInp.value+'cc'});
     saveSettings('priorities',PRIORITIES);
-    inp.value='';
-    renderPrioritiesSettings(document.getElementById('settings-body'));
+    renderPrioritiesSettings();
   });
   addRow.append(inp,colInp,btn);body.appendChild(addRow);
 }
