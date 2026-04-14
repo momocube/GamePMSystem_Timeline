@@ -466,26 +466,7 @@ function buildLabels(){
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
     const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background=t.color;
     const nm=document.createElement('span');nm.className='lc-tname';nm.style.color=t.color;nm.textContent=t.name;
-    // Status dropdown
-    const stSel=document.createElement('select');
-    stSel.className='status-sel';
-    const curSt=statusObj(t.status);
-    stSel.style.cssText=`font-size:8px;padding:1px 4px;border-radius:8px;border:1px solid ${curSt.color}40;cursor:pointer;outline:none;max-width:68px;background:${curSt.bg};color:${curSt.color};font-weight:600;`;
-    PROJECT_STATUSES.forEach(st=>{
-      const o=document.createElement('option');o.value=st.id;o.textContent=st.label;
-      if(t.status===st.id)o.selected=true;
-      stSel.appendChild(o);
-    });
-    stSel.addEventListener('change',e=>{e.stopPropagation();t.status=stSel.value;saveTrunk(t);buildLabels();buildTimeline();});
-    stSel.addEventListener('click',e=>e.stopPropagation());
-    // Priority badge
-    const priObj=priorityObj(t.priority);
-    const priBadge=document.createElement('span');priBadge.className='status-badge';
-    priBadge.style.cssText=`background:${priObj.bg};color:${priObj.color};font-size:7px;`;
-    priBadge.textContent=priObj.label;
-    const subRow=document.createElement('div');subRow.className='lc-trunk-sub';
-    subRow.append(stSel,priBadge);
-    tr.append(drag,ca,dt,nm,subRow);
+    tr.append(drag,ca,dt,nm);
     // Right-click context menu for edit/delete
     tr.addEventListener('contextmenu',e=>{
       e.preventDefault();e.stopPropagation();
@@ -589,6 +570,34 @@ function showContextMenu(e,trunkId,branchId){
     menu.appendChild(statusItem);
   }
 
+  // Color picker
+  const colorItem=document.createElement('div');
+  colorItem.style.cssText='padding:6px 10px;font-size:11px;cursor:pointer;border-radius:4px;transition:background .1s;display:flex;align-items:center;gap:6px;';
+  const colorPrev=document.createElement('div');
+  const curColor=(()=>{
+    const t=TRUNKS.find(x=>x.id===trunkId);
+    if(branchId){const b=t?.branches.find(x=>x.id===branchId);return b?b.color:'#999';}
+    return t?t.color:'#999';
+  })();
+  colorPrev.style.cssText=`width:12px;height:12px;border-radius:50%;background:${curColor};border:1px solid var(--border);`;
+  const colorLabel=document.createElement('span');colorLabel.textContent='🎨 變更顏色';
+  colorItem.append(colorPrev,colorLabel);
+  colorItem.addEventListener('mouseenter',()=>colorItem.style.background='var(--surface2)');
+  colorItem.addEventListener('mouseleave',()=>colorItem.style.background='');
+  colorItem.addEventListener('click',()=>{
+    const inp=document.createElement('input');inp.type='color';inp.value=curColor;
+    inp.style.cssText='position:fixed;opacity:0;pointer-events:none;';
+    document.body.appendChild(inp);
+    inp.addEventListener('input',()=>{
+      const t=TRUNKS.find(x=>x.id===trunkId);
+      if(branchId){const b=t?.branches.find(x=>x.id===branchId);if(b)b.color=inp.value;}
+      else if(t){t.color=inp.value;t.branches.forEach(b=>{b.color=t.color;});}
+      saveTrunk(t);buildLabels();buildTimeline();
+    });
+    inp.addEventListener('change',()=>{inp.remove();menu.remove();});
+    inp.click();
+  });
+
   const delItem=document.createElement('div');
   delItem.style.cssText='padding:6px 10px;font-size:11px;cursor:pointer;border-radius:4px;transition:background .1s;color:var(--red);';
   delItem.textContent='🗑️ 刪除';
@@ -601,21 +610,21 @@ function showContextMenu(e,trunkId,branchId){
       if(t&&confirm(`確定刪除枝幹「${t.branches.find(b=>b.id===branchId)?.name}」？`)){
         t.branches=t.branches.filter(b=>b.id!==branchId);
         NODES=NODES.filter(n=>n.branch!==branchId);
-        buildLabels();buildTimeline();buildSelects();
+        saveTrunk(t);buildLabels();buildTimeline();buildSelects();
       }
     }else{
       const t=TRUNKS.find(x=>x.id===trunkId);
       if(t&&confirm(`確定刪除主幹「${t.name}」及其所有枝幹？`)){
         const idx=TRUNKS.indexOf(t);
-        const branchIds=t.branches.map(b=>b.id);
         NODES=NODES.filter(n=>n.trunk!==trunkId);
         TRUNKS.splice(idx,1);
+        if(typeof db!=='undefined')db.collection('trunks').doc(trunkId).delete().catch(()=>{});
         buildLabels();buildTimeline();buildSelects();buildOwnerFilter();updateHeaderRange();
       }
     }
   });
 
-  menu.append(editItem,delItem);
+  menu.append(editItem,colorItem,delItem);
   document.body.appendChild(menu);
   setTimeout(()=>{
     const close=ev=>{if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('click',close);}};
@@ -1295,6 +1304,7 @@ function renderSettingsModal(){
 }
 
 function renderMembersSettings(body){
+  body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   MEMBERS.forEach((m,i)=>{
     const row=document.createElement('div');row.className='settings-row';
@@ -1324,6 +1334,7 @@ function renderMembersSettings(body){
 }
 
 function renderCategoriesSettings(body){
+  body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   REPORT_TYPES.forEach((rt,i)=>{
     const row=document.createElement('div');row.className='settings-row';
@@ -1358,6 +1369,7 @@ function renderCategoriesSettings(body){
 }
 
 function renderStatusesSettings(body){
+  body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   PROJECT_STATUSES.forEach((st,i)=>{
     const row=document.createElement('div');row.className='settings-row';
@@ -1389,6 +1401,7 @@ function renderStatusesSettings(body){
 }
 
 function renderPrioritiesSettings(body){
+  body.innerHTML='';
   const list=document.createElement('div');list.className='settings-list';
   PRIORITIES.forEach((pr,i)=>{
     const row=document.createElement('div');row.className='settings-row';
