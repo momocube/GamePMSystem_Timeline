@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>閃動格子 — 遊戲部</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+</head>
+<body>
+<header>
+  <div class="hdr-icon">⚡</div>
+  <span class="hdr-title">閃動格子 — 遊戲部</span>
+  <span class="hdr-range">2024.03 → ∞</span>
+  <div class="hdr-views">
+    <button class="hdr-view-btn active" id="btn-timeline">🕐 時間軸</button>
+    <button class="hdr-view-btn" id="btn-dashboard">📊 專案總表</button>
+  </div>
+  <div class="hdr-right">
+    <select class="scale-sel" id="scale-sel">
+      <option value="50">50%</option>
+      <option value="75">75%</option>
+      <option value="100" selected>100%</option>
+      <option value="125">125%</option>
+      <option value="150">150%</option>
+      <option value="200">200%</option>
+    </select>
+    <button class="today-btn" id="btn-today">📍 今天</button>
+    <div class="hdr-sep"></div>
+    <select class="scale-sel" id="type-filter-sel">
+      <option value="all">全部類型</option>
+      <option value="update">📝 進度回報</option>
+      <option value="milestone">🏁 里程碑</option>
+      <option value="trip">✈️ 出差/公出</option>
+    </select>
+    <div class="hdr-sep"></div>
+    <div id="mavs"></div>
+    <button class="btn-members" id="btn-settings">⚙️ 設定</button>
+  </div>
+</header>
+<div id="main">
+  <div id="lcol">
+    <div id="lspc"><span id="lspc-label">BRANCH INFO</span></div>
+    <div id="lbody"></div>
+    <div id="add-trunk-btn-wrap">
+      <button id="add-trunk-btn" class="add-btn">+ 新增主幹</button>
+    </div>
+    <div id="lcol-resize-handle"></div>
+  </div>
+  <div id="sa"><div id="canvas"><div id="ruler"></div><div id="tdline"></div><div id="rows"></div></div></div>
+  <!-- Right detail panel -->
+  <div id="detail-panel">
+    <div class="dp-hdr">
+      <div class="dp-hdr-dot" id="dp-hdr-dot"></div>
+      <div class="dp-hdr-name" id="dp-hdr-name"></div>
+      <button class="dp-close" id="dp-close">✕</button>
+    </div>
+    <div class="dp-body" id="dp-body"></div>
+  </div>
+</div>
+<div id="bot-resize-handle"></div>
+<!-- Bottom tabs -->
+<div id="bot-tabs">
+  <button class="bot-tab on" data-panel="rp">📋 進度回報</button>
+  <button class="bot-tab" data-panel="weekly-panel">📊 週報總覽</button>
+  <button class="bot-tab-collapse" id="btn-collapse-bot">▼</button>
+</div>
+<!-- Unified Report panel (left: node report, right: daily entries) -->
+<div id="rp">
+  <div id="rp-left">
+    <div class="rp-left-header">
+      <div class="rpc" style="width:168px"><div class="rl">BRANCH</div><select id="rp-owner-filter" class="scale-sel" style="width:100%;margin-bottom:6px;font-size:11px;"></select><select id="rpbr" style="overflow-y:auto;line-height:1.8;"></select></div>
+      <div class="rpc" style="width:140px"><div class="rl">回報者 / TYPE</div>
+        <select id="rprep" style="margin-bottom:6px;"></select>
+        <div class="tbts">
+          <button class="tbt on" data-type="update">📝 進度回報</button>
+          <button class="tbt" data-type="milestone">🏁 里程碑</button>
+          <button class="tbt" data-type="trip">✈️ 出差/公出</button>
+        </div>
+      </div>
+    </div>
+    <div id="rmsgcol"><div class="rl">MESSAGE</div>
+      <div id="rmsginner">
+        <div id="msdrow"><input type="date" id="msdate"></div>
+        <textarea id="rmsg" placeholder="回報這個枝幹的最新進度…"></textarea>
+        <div id="trip-form" style="display:none;flex-direction:column;gap:6px;">
+          <input type="text" id="trip-location" placeholder="地點" class="trip-input">
+          <textarea id="trip-items" placeholder="處理項目" class="trip-textarea" rows="2"></textarea>
+          <textarea id="trip-progress" placeholder="進展" class="trip-textarea" rows="2"></textarea>
+          <textarea id="trip-blockers" placeholder="卡點" class="trip-textarea" rows="2"></textarea>
+          <textarea id="trip-requests" placeholder="其他人員需求" class="trip-textarea" rows="2"></textarea>
+          <textarea id="trip-incidents" placeholder="突發狀況" class="trip-textarea" rows="2"></textarea>
+        </div>
+        <div id="iuparea" onclick="document.getElementById('ifinput').click()">📎 上傳圖片（可多選）</div>
+        <input type="file" id="ifinput" accept="image/*" multiple style="display:none">
+        <div id="ipreviews"></div>
+        <div id="link-attach-area" style="display:flex;gap:4px;align-items:center;">
+          <input type="text" id="rp-link-input" placeholder="📎 貼上附件連結…" style="flex:1;padding:4px 7px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
+        </div>
+        <div id="rp-link-previews" style="display:flex;flex-direction:column;gap:2px;"></div>
+        <textarea id="rp-notes" placeholder="備註（選填）…" style="padding:5px 8px;resize:none;line-height:1.4;border-radius:4px;font-size:11px;min-height:28px;color:var(--text-dim);flex-shrink:0;"></textarea>
+      </div>
+    </div>
+    <div id="subco"><button class="subbt" id="subbt">↑</button><div class="subhi">送出</div></div>
+  </div>
+  <div id="rp-divider"></div>
+  <div id="rp-right">
+    <div class="rp-right-header">
+      <span class="rl" style="margin:0">每日進度</span>
+      <input type="date" id="daily-date" style="width:auto;padding:3px 6px;font-size:11px;margin-left:8px;">
+      <select id="daily-member" style="width:auto;padding:3px 6px;font-size:11px;"></select>
+      <div style="margin-left:auto;"></div>
+    </div>
+    <div class="rp-right-body">
+      <div class="daily-body" id="daily-entries"></div>
+      <button class="daily-add" id="daily-add">＋ 新增項目</button>
+    </div>
+    <!-- submit removed: auto-sync on change -->
+  </div>
+</div>
+<!-- Weekly panel -->
+<div id="weekly-panel">
+  <div class="wk-top">
+    <button class="wk-nav" id="wk-prev">‹</button>
+    <span class="wk-range" id="wk-range"></span>
+    <button class="wk-nav" id="wk-next">›</button>
+  </div>
+  <div class="wk-body" id="wk-body"></div>
+</div>
+
+<!-- Node detail/edit modal -->
+<div class="overlay" id="nmodal">
+  <div class="modal-box" id="nmod-box">
+    <div class="modal-hdr">
+      <div style="font-size:10px;color:var(--text-dim);" id="nmod-type-hdr"></div>
+      <button class="mclose" id="nmod-close">✕</button>
+    </div>
+    <div id="nmod-slides">
+      <img id="nmod-img" src="" alt="">
+      <button class="slbt" id="slprev">‹</button>
+      <button class="slbt" id="slnext">›</button>
+      <div id="slctr"></div>
+    </div>
+    <div id="nmod-body">
+      <div class="nmod-row">
+        <div class="nmod-av" id="nmod-av2"></div>
+        <div class="nmod-right">
+          <div class="nmod-who" id="nmod-who2"></div>
+          <div class="nmod-branch" id="nmod-branch"></div>
+          <textarea class="nmod-edit" id="nmod-msg-edit" rows="3"></textarea>
+          <div id="nmod-img-upload" onclick="document.getElementById('nmod-ifinput').click()">📎 新增圖片</div>
+          <input type="file" id="nmod-ifinput" accept="image/*" multiple style="display:none">
+          <div id="nmod-img-previews"></div>
+          <div id="nmod-links" style="margin-top:6px;display:flex;flex-direction:column;gap:3px;"></div>
+        </div>
+      </div>
+      <!-- attendees removed -->
+      <div class="nmod-meta">
+        <div class="nmod-date" id="nmod-date"></div>
+        <div class="nmod-collabs" id="nmod-collabs"></div>
+        <button class="nmod-copy" id="nmod-copy" title="複製回報內容">📋</button>
+        <button class="nmod-save" id="nmod-save">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Settings modal (tabs: members, categories, project status) -->
+<div class="overlay" id="settings-modal">
+  <div class="modal-box" style="width:520px;max-width:95vw;">
+    <div class="modal-hdr">
+      <span class="title">⚙️ 設定</span>
+      <button class="mclose" id="settings-close">✕</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab on" data-stab="members">👥 成員</button>
+      <button class="settings-tab" data-stab="categories">🏷️ 回報類別</button>
+      <button class="settings-tab" data-stab="statuses">📌 專案狀態</button>
+      <button class="settings-tab" data-stab="priorities">🔥 緊急程度</button>
+    </div>
+    <div class="settings-body" id="settings-body">
+      <!-- dynamically populated -->
+    </div>
+  </div>
+</div>
+<!-- Dashboard page (shares header with timeline) -->
+<div id="dashboard-page">
+  <div class="dash-toolbar">
+    <span class="dash-toolbar-label">📊 專案總表</span>
+    <span class="dash-toolbar-week" id="dash-week-label"></span>
+    <div class="dash-toolbar-right">
+      <button class="dash-export-btn" id="dash-export-xlsx">📥 匯出 Excel</button>
+      <button class="dash-export-btn" id="dash-export-pdf">🖨️ 匯出 PDF</button>
+    </div>
+  </div>
+  <div class="dash-body" id="dash-body"></div>
+</div>
+<!-- Progress popover -->
+<div id="prog-pop">
+  <label>進度調整</label>
+  <input type="range" id="prog-range" min="0" max="100" value="0">
+  <div class="pval" id="prog-val">0%</div>
+  <div style="margin-top:6px;display:flex;align-items:center;gap:5px;font-size:10px;color:var(--text-dim);cursor:pointer;">
+    <input type="checkbox" id="prog-no-end-cb"> 無截止日
+  </div>
+</div>
+<!-- Person picker popover -->
+<div id="person-pop"></div>
+
+<!-- Add Trunk Form -->
+<div class="overlay" id="add-trunk-modal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="title">新增主幹</span>
+      <button class="mclose" id="add-trunk-close">✕</button>
+    </div>
+    <div class="form-group">
+      <label>主幹名稱</label>
+      <input type="text" id="add-trunk-name" placeholder="輸入主幹名稱">
+    </div>
+    <div class="form-group">
+      <label>顏色</label>
+      <input type="color" id="add-trunk-color" value="#6492c5">
+    </div>
+    <div class="form-group">
+      <label>開始日期</label>
+      <input type="date" id="add-trunk-start">
+    </div>
+    <div class="form-group">
+      <label>結束日期</label>
+      <input type="date" id="add-trunk-end">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="form-cancel" id="add-trunk-cancel">取消</button>
+      <button class="form-confirm" id="add-trunk-confirm">確認</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Branch Form -->
+<div class="overlay" id="add-branch-modal">
+  <div class="modal-box">
+    <div class="modal-hdr">
+      <span class="title">新增枝幹</span>
+      <button class="mclose" id="add-branch-close">✕</button>
+    </div>
+    <div class="form-group">
+      <label>枝幹名稱</label>
+      <input type="text" id="add-branch-name" placeholder="輸入枝幹名稱">
+    </div>
+    <div class="form-group" id="add-branch-color-preview">
+      <label>顏色（自動衍生自主幹）</label>
+      <div id="add-branch-color-swatch" style="width:100%;height:28px;border-radius:4px;border:1px solid var(--border);"></div>
+    </div>
+    <div class="form-group">
+      <label>開始日期</label>
+      <input type="date" id="add-branch-start">
+    </div>
+    <div class="form-group">
+      <label>結束日期（可選）</label>
+      <input type="date" id="add-branch-end">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
+      <button class="form-cancel" id="add-branch-cancel">取消</button>
+      <button class="form-confirm" id="add-branch-confirm">確認</button>
+    </div>
+  </div>
+</div>
+
+<!-- Firebase SDK (compat for browser script tags) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyDsnZYISd2r9SjfgmvZVUehNRj9q8oCkvI",
+    authDomain: "game-pm-system02.firebaseapp.com",
+    databaseURL: "https://game-pm-system02-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "game-pm-system02",
+    storageBucket: "game-pm-system02.firebasestorage.app",
+    messagingSenderId: "377937018386",
+    appId: "1:377937018386:web:8e02615883c42591bea2cb",
+    measurementId: "G-728T3M7WZL"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+</script>
+<script src="app.js"></script>
+</body>
+</html>
