@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>閃動格子 遊戲部</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+body{font-family:sans-serif;margin:0}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#f1f1f1}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:10px}
+.gantt-bar{position:absolute;border-radius:4px;cursor:grab;display:flex;align-items:center;user-select:none;box-sizing:border-box}
+.gantt-bar:hover{filter:brightness(1.1)}
+.gantt-handle{position:absolute;top:0;bottom:0;width:7px;cursor:ew-resize;z-index:2;border-radius:3px}
+.gantt-handle:hover{background:rgba(255,255,255,.35)}
+.gantt-handle-l{left:0}.gantt-handle-r{right:0}
+.qn-panel{flex-shrink:0;width:0;overflow:hidden;transition:width .25s;background:#fff;border-left:0px solid #e5e7eb;display:flex;flex-direction:column}
+.qn-panel.open{width:340px;border-left-width:1px}
+.qn-toggle{flex-shrink:0;width:26px;background:#f3f4f6;border-left:1px solid #d1d5db;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;padding:12px 0;user-select:none}
+.qn-toggle:hover{background:#e5e7eb}
+.mention-popup{position:fixed;z-index:500;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:140px;max-height:200px;overflow-y:auto}
+.lock-overlay{position:absolute;inset:0;background:rgba(249,250,251,.7);display:flex;align-items:center;justify-content:center;border-radius:4px;pointer-events:all;z-index:10}
+@keyframes fbpulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 5px transparent}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes bellring{0%,100%{transform:rotate(0)}20%{transform:rotate(15deg)}40%{transform:rotate(-12deg)}60%{transform:rotate(8deg)}80%{transform:rotate(-5deg)}}
+.bell-ring{animation:bellring .5s ease}
+.board-card-dragging{opacity:0.35;transform:scale(0.97);}
+.drop-col-highlight{background:#eef2ff !important;outline:2px dashed #6366f1;outline-offset:-2px;}
+@keyframes notedot{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:.7}}
+.note-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ef4444;animation:notedot 1.2s ease infinite;flex-shrink:0}
+.member-row-dragging{opacity:0.4;background:#eef2ff !important;}
+.member-row-dragover{outline:2px dashed #6366f1;outline-offset:-2px;background:#eef2ff !important;}
+</style>
+</head>
+<body><div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback,useMemo} = React;
+
+const FB_CFG={apiKey:"AIzaSyCNsSKCjVb_eolwYMyDxlGLf5VhlM-XfKQ",authDomain:"game-pm-system.firebaseapp.com",databaseURL:"https://game-pm-system-default-rtdb.asia-southeast1.firebasedatabase.app",projectId:"game-pm-system",storageBucket:"game-pm-system.firebasestorage.app",messagingSenderId:"1082387722665",appId:"1:1082387722665:web:324d3395cc9c1ead1514b8"};
+firebase.initializeApp(FB_CFG);
+const db=firebase.database();
+const fbRef=p=>db.ref(p);
+
+const uid=()=>Math.random().toString(36).slice(2,9);
+const today=()=>new Date().toISOString().slice(0,10);
+const nowFull=()=>{const n=new Date();return n.toISOString().slice(0,10)+' '+String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0');};
+const isOD=d=>d&&d<today();
+const fmt=s=>{if(!s)return'';const[,m,d]=s.split('-');return`${+m}/${+d}`;};
+const dName=s=>['週日','週一','週二','週三','週四','週五','週六'][new Date(s+'T00:00:00').getDay()];
+const addD=(ds,n)=>{const d=new Date(ds+'T00:00:00');d.setDate(d.getDate()+n);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
+const dDiff=(a,b)=>Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000);
+const clone=o=>JSON.parse(JSON.stringify(o));
+const HOL=new Set(['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-21','2026-02-22','2026-02-23','2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-05-01','2026-06-19','2026-06-20','2026-06-21','2026-09-25','2026-09-26','2026-09-27','2026-10-10']);
+const isHol=d=>HOL.has(d);
+const isWknd=d=>{const x=new Date(d+'T00:00:00').getDay();return x===0||x===6;};
+const isWork=d=>!isWknd(d)&&!isHol(d);
+const getWorkdays=(start,n)=>{const r=[],d=new Date(start+'T00:00:00');while(r.length<n){const s=d.toISOString().slice(0,10);if(isWork(s))r.push(s);d.setDate(d.getDate()+1)}return r;};
+
+const DEF_ST=[{id:'s1',label:'待處理',color:'bg-gray-200 text-gray-700'},{id:'s2',label:'製作中',color:'bg-blue-200 text-blue-800'},{id:'s3',label:'測試中',color:'bg-yellow-200 text-yellow-800'},{id:'s4',label:'完成',color:'bg-green-200 text-green-800'},{id:'s5',label:'擱置中',color:'bg-red-200 text-red-700'}];
+const ST_COLS=[{lb:'灰',c:'bg-gray-200 text-gray-700'},{lb:'藍',c:'bg-blue-200 text-blue-800'},{lb:'黃',c:'bg-yellow-200 text-yellow-800'},{lb:'綠',c:'bg-green-200 text-green-800'},{lb:'紅',c:'bg-red-200 text-red-700'},{lb:'紫',c:'bg-purple-200 text-purple-800'},{lb:'橘',c:'bg-orange-200 text-orange-800'}];
+const DEF_TAGS=['設計組','遊戲組','工程組','行銷組','企劃組'];
+const DEF_TAGC={'設計組':'bg-purple-100 text-purple-700','遊戲組':'bg-pink-100 text-pink-700','工程組':'bg-cyan-100 text-cyan-700','行銷組':'bg-orange-100 text-orange-700','企劃組':'bg-lime-100 text-lime-700'};
+const TAGC_OPTS=[{lb:'紫',c:'bg-purple-100 text-purple-700'},{lb:'粉',c:'bg-pink-100 text-pink-700'},{lb:'青',c:'bg-cyan-100 text-cyan-700'},{lb:'橘',c:'bg-orange-100 text-orange-700'},{lb:'黃綠',c:'bg-lime-100 text-lime-700'},{lb:'藍',c:'bg-blue-100 text-blue-700'},{lb:'綠',c:'bg-green-100 text-green-700'},{lb:'紅',c:'bg-red-100 text-red-700'},{lb:'灰',c:'bg-gray-200 text-gray-700'},{lb:'靛',c:'bg-indigo-100 text-indigo-700'}];
+const TASK_TYPES=[{lb:'研發',c:'bg-pink-100 text-pink-700'},{lb:'設計',c:'bg-yellow-100 text-yellow-700'},{lb:'外包',c:'bg-orange-100 text-orange-700'},{lb:'文件',c:'bg-lime-100 text-lime-700'},{lb:'工務',c:'bg-cyan-100 text-cyan-700'},{lb:'維護',c:'bg-purple-100 text-purple-700'},{lb:'外展',c:'bg-blue-500 text-white'},{lb:'出差',c:'bg-green-500 text-white'},{lb:'公出',c:'bg-green-700 text-white'},{lb:'會議',c:'bg-red-600 text-white'},{lb:'雜項',c:'bg-gray-200 text-gray-700'},{lb:'請假',c:'bg-gray-600 text-white'}];
+const TYPE_C=Object.fromEntries(TASK_TYPES.map(t=>[t.lb,t.c]));
+const PROMISE_ST=[{lb:'已完成',c:'bg-green-200 text-green-800'},{lb:'有問題',c:'bg-yellow-200 text-yellow-800'},{lb:'未完成',c:'bg-red-200 text-red-700'}];
+const PROMISE_C=Object.fromEntries(PROMISE_ST.map(s=>[s.lb,s.c]));
+const DEF_MEM=['Alice','Bob','Carol','David','Eve'];
+const COL_W=24,ROW_H=36,LBL_W=240,QCOLORS=[{bg:'#FEF9C3',dot:'#EAB308'},{bg:'#FCE7F3',dot:'#EC4899'},{bg:'#DBEAFE',dot:'#3B82F6'},{bg:'#DCFCE7',dot:'#22C55E'},{bg:'#FFEDD5',dot:'#F97316'},{bg:'#F3E8FF',dot:'#A855F7'}];
+const URG_OPTS=[{lb:'最高',c:'bg-red-600 text-white'},{lb:'高',c:'bg-orange-400 text-white'},{lb:'普通',c:'bg-yellow-200 text-yellow-800'},{lb:'低',c:'bg-green-200 text-green-800'},{lb:'長期',c:'bg-gray-200 text-gray-600'}];
+const URG_C=Object.fromEntries(URG_OPTS.map(u=>[u.lb,u.c]));
+const MC=['bg-indigo-100 text-indigo-700','bg-pink-100 text-pink-700','bg-emerald-100 text-emerald-700','bg-amber-100 text-amber-800','bg-purple-100 text-purple-700','bg-cyan-100 text-cyan-700','bg-rose-100 text-rose-700','bg-lime-100 text-lime-700'];
+const mc=(name,members)=>MC[Math.max(0,(members||[]).indexOf(name))%MC.length];
+const NODE_COLORS=['#6366f1','#ec4899','#10b981','#f59e0b','#8b5cf6','#06b6d4','#f43f5e','#84cc16','#14b8a6','#f97316'];
+const nodeColor=idx=>NODE_COLORS[idx%NODE_COLORS.length];
+
+const PERM_FIELDS=[{id:'name',label:'任務名稱'},{id:'statusId',label:'狀態'},{id:'urgency',label:'緊急程度'},{id:'assignee',label:'負責人'},{id:'follower',label:'追蹤者'},{id:'collaborators',label:'協作者'},{id:'startDate',label:'開始日期'},{id:'dueDate',label:'截止日期'},{id:'tags',label:'組別標籤'},{id:'docs',label:'附件連結'},{id:'subtasks',label:'子任務'},{id:'comments',label:'留言'},{id:'trackStart',label:'追蹤起始日'}];
+const DEF_ROLE_PERMS={owner:PERM_FIELDS.map(f=>f.id),tracker:['startDate','dueDate','docs','comments','trackStart'],collaborator:['comments']};
+
+function getRole(card,user,admins=[]){
+  if(!user||!card)return null;
+  if((admins||[]).includes(user))return'admin';
+  if(card.assignee===user)return'owner';
+  if(card.follower===user)return'tracker';
+  if((card.collaborators||[]).includes(user))return'collaborator';
+  return null;
+}
+function getRoles(card,user,admins=[]){
+  if(!user||!card)return[];
+  const roles=[];
+  if((admins||[]).includes(user))roles.push('admin');
+  if(card.assignee===user)roles.push('owner');
+  if(card.follower===user)roles.push('tracker');
+  if((card.collaborators||[]).includes(user))roles.push('collaborator');
+  return roles;
+}
+function can(card,user,admins,field,rolePerms){
+  const role=getRole(card,user,admins);
+  if(!role)return false;
+  if(role==='admin')return true;
+  const perms=rolePerms||DEF_ROLE_PERMS;
+  return(perms[role]||[]).includes(field);
+}
+const ROLE_LABELS={admin:{icon:'👑',label:'管理員',c:'text-red-600 bg-red-50 border-red-200'},owner:{icon:'👤',label:'負責人',c:'text-indigo-600 bg-indigo-50 border-indigo-200'},tracker:{icon:'👁',label:'追蹤者',c:'text-amber-600 bg-amber-50 border-amber-200'},collaborator:{icon:'🔧',label:'協作者',c:'text-emerald-600 bg-emerald-50 border-emerald-200'}};
+
+const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+const NOTES_K=u=>`pm_notes_${u}`;
+
+function buildDefault(){
+  const n1='n_r1',n2='n_s',n3='n_l',n4='n_288',n5='n_d';const c1='c_1',c2='c_2',c3='c_3',c4='c_4';
+  const nodes={};
+  nodes[n1]={id:n1,name:'經典 V1',parentId:null,children:[n2],cardRefs:[]};
+  nodes[n2]={id:n2,name:'A-軟體',parentId:n1,children:[n3,n5],cardRefs:[]};
+  nodes[n3]={id:n3,name:'A-4-關卡',parentId:n2,children:[n4],cardRefs:[]};
+  nodes[n4]={id:n4,name:'288',parentId:n3,children:[],cardRefs:[c1,c2]};
+  nodes[n5]={id:n5,name:'A-2-設計',parentId:n2,children:[],cardRefs:[c3,c4]};
+  const mk=(id,nm,st,urg,a,f,sd,dd,nid,tg)=>({id,name:nm,nodeId:nid,statusId:st,urgency:urg,assignee:a,follower:f||'',collaborators:[],startDate:sd,dueDate:dd,tags:tg||[],docs:[],comments:[],createdAt:nowFull(),completedAt:null,subtasks:[],archived:false,projectNote:'',trackStart:''});
+  const cards={};
+  cards[c1]=mk(c1,'288-經典(4-6P)','s2','高','Alice','David','2026-02-01','2026-03-15',n4,['遊戲組']);
+  cards[c2]=mk(c2,'288-經典(2-3P)','s1','普通','Bob','Alice','2026-03-01','2026-03-30',n4,[]);
+  cards[c3]=mk(c3,'UI設計稿','s2','普通','Carol','Eve','2026-02-15','2026-03-20',n5,['設計組']);
+  cards[c4]=mk(c4,'動態素材','s1','低','Eve','Carol','2026-03-05','2026-04-01',n5,['設計組']);
+  return{nodes,cards,rootNodes:[n1]};
+}
+function nodePath(nodes,nid){const p=[];let c=nid;while(c){const n=(nodes||{})[c];if(!n)break;p.unshift(n.name);c=n.parentId;}return p.join(' › ');}
+function nodeCards(nodes,cards,nid){if(!nid)return[];const n=(nodes||{})[nid];if(!n)return[];return(n.cardRefs||[]).map(id=>(cards||{})[id]).filter(c=>c&&!c.archived);}
+function subtreeCards(nodes,cards,nid){if(!nid)return[];const n=(nodes||{})[nid];if(!n)return[];let r=nodeCards(nodes,cards,nid);(n.children||[]).forEach(cid=>{r=r.concat(subtreeCards(nodes,cards,cid))});return r;}
+function nodeStats(nodes,cards,nid,statuses){const all=subtreeCards(nodes,cards,nid);return{total:all.length,done:all.filter(c=>(statuses||[]).find(s=>s.id===c.statusId)?.label==='完成').length,overdue:all.filter(c=>isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成').length};}
+function breadcrumb(nodes,nid){const p=[];let c=nid;while(c){const n=(nodes||{})[c];if(!n)break;p.unshift(n);c=n.parentId;}return p;}
+
+// 修3：promote 到 root 時保留在根層顯示（不掛到任何節點）
+function promoteCard(nodes,cards,cardId,fromNid){
+  const from=(nodes||{})[fromNid];if(!from)return null;
+  const toNid=from.parentId||null;
+  const nn=clone(nodes),nc=clone(cards);
+  nn[fromNid].cardRefs=(nn[fromNid].cardRefs||[]).filter(id=>id!==cardId);
+  if(toNid){
+    if(!(nn[toNid].cardRefs||[]).includes(cardId))nn[toNid].cardRefs=[...(nn[toNid].cardRefs||[]),cardId];
+  }
+  if(nc[cardId])nc[cardId].nodeId=toNid;
+  return{nodes:nn,cards:nc,toNid};
+}
+function demoteCard(nodes,cards,cardId,fromNid,toChildId){
+  const from=(nodes||{})[fromNid];if(!from||(!(from.children||[]).includes(toChildId)))return null;
+  const nn=clone(nodes),nc=clone(cards);
+  nn[fromNid].cardRefs=(nn[fromNid].cardRefs||[]).filter(id=>id!==cardId);
+  if(!(nn[toChildId].cardRefs||[]).includes(cardId))nn[toChildId].cardRefs=[...(nn[toChildId].cardRefs||[]),cardId];
+  if(nc[cardId])nc[cardId].nodeId=toChildId;
+  return{nodes:nn,cards:nc,toNid:toChildId};
+}
+function trackDays(card){
+  const start=card.trackStart||card.startDate||card.createdAt?.slice(0,10);
+  if(!start)return null;
+  const s=new Date(start+'T00:00:00');
+  const end=card.completedAt?new Date(card.completedAt.slice(0,10)+'T00:00:00'):new Date(today()+'T00:00:00');
+  return Math.max(0,Math.round((end-s)/86400000));
+}
+
+function useFBStatus(){const[s,setS]=useState('checking');useEffect(()=>{const r=fbRef('.info/connected');const h=r.on('value',snap=>setS(snap.val()?'connected':'disconnected'));return()=>r.off('value',h)},[]);return s;}
+function useFB(path,def){
+  const[data,setData]=useState(null);
+  useEffect(()=>{
+    const r=fbRef(path);
+    const h=r.on('value',snap=>{
+      let v=snap.val();
+      if(v===null){
+        const isEmpty=Array.isArray(def)?def.length===0:typeof def==='object'&&def!==null&&Object.keys(def).length===0;
+        if(!isEmpty)r.set(def);
+        setData(def);
+      }else{
+        if(Array.isArray(def)&&v!==null&&typeof v==='object'&&!Array.isArray(v)){v=Object.values(v);}
+        setData(v);
+      }
+    });
+    return()=>r.off('value',h);
+  },[path]);
+  const set=useCallback(upd=>{
+    setData(prev=>{
+      const next=typeof upd==='function'?upd(prev??def):upd;
+      const toStore=(Array.isArray(next)&&next.length===0)?null:next;
+      fbRef(path).set(toStore??null);
+      return next;
+    });
+  },[path]);
+  return[data,set];
+}
+
+function useNotifs(curUser){
+  const[notifs,setNotifs]=useState([]);const[ring,setRing]=useState(false);const prevUser=useRef(curUser);
+  useEffect(()=>{
+    if(!curUser)return;
+    const path=`notifs/${curUser}`;const r=fbRef(path);
+    const h=r.on('value',snap=>{
+      const val=snap.val();
+      if(!val){setNotifs([]);return;}
+      const arr=Object.entries(val).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt?.localeCompare(a.createdAt||'')||0);
+      setNotifs(prev=>{
+        if(prevUser.current===curUser&&arr.some(n=>!n.read&&!prev.find(p=>p._key===n._key))){setRing(true);setTimeout(()=>setRing(false),600);}
+        return arr;
+      });
+    });
+    prevUser.current=curUser;
+    return()=>r.off('value',h);
+  },[curUser]);
+  const markRead=useCallback(key=>{fbRef(`notifs/${curUser}/${key}`).update({read:true});},[curUser]);
+  const markAll=useCallback(()=>{notifs.filter(n=>!n.read).forEach(n=>fbRef(`notifs/${curUser}/${n._key}`).update({read:true}));},[curUser,notifs]);
+  const delNotif=useCallback(key=>{fbRef(`notifs/${curUser}/${key}`).remove();},[curUser]);
+  return{notifs,ring,markRead,markAll,delNotif};
+}
+function sendNotif(toUser,notif){const key=uid();fbRef(`notifs/${toUser}/${key}`).set({...notif,id:key,createdAt:nowFull(),read:false});}
+
+const DEF_WEEKLY={weeks:[{id:'w1',weekLabel:'2026-02-23',collapsed:false,members:[{name:'Momo',promises:[{text:'完成光域燈條安裝',status:''}],dailyItems:[[{text:'光域燈條完成',type:'工務',id:'wi1'}],[{text:'共門224一樓',type:'研發',id:'wi2'}],[],[],[]]},{name:'鮭魚',promises:[{text:'採購木板與管子',status:''}],dailyItems:[[{text:'購買木板',type:'工務',id:'wi3'}],[{text:'解決電路問題',type:'維護',id:'wi4'}],[],[],[]]}]}]};
+
+/* ══ 基礎 UI ══ */
+function FBDot({s}){const cfg={connected:{c:'#22c55e',l:'雲端同步中',p:true},disconnected:{c:'#ef4444',l:'離線中',p:false},checking:{c:'#f59e0b',l:'連線中',p:true}}[s]||{c:'#9ca3af',l:'未知',p:false};return<div title={cfg.l} style={{display:'flex',alignItems:'center',gap:4}}><span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:cfg.c,animation:cfg.p?'fbpulse 1.5s infinite':'none',flexShrink:0}}/><span style={{fontSize:9,color:'#9ca3af'}}>{cfg.l}</span></div>;}
+function Loading(){return<div style={{display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',height:'100vh',gap:16}}><div style={{width:40,height:40,border:'4px solid #e0e7ff',borderTop:'4px solid #6366f1',borderRadius:'50%',animation:'spin .8s linear infinite'}}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style><div style={{color:'#6366f1',fontWeight:700}}>閃動格子 遊戲部</div></div>;}
+function UBadge({u}){if(!u||u==='普通')return null;return<span className={`text-xs rounded px-1.5 py-0.5 font-medium ${URG_C[u]||'bg-gray-100 text-gray-500'}`}>{u}</span>;}
+function PBar({pct,h=5}){const c=pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444';return<div style={{background:'#f3f4f6',borderRadius:3,height:h,flex:1,overflow:'hidden'}}><div style={{width:Math.min(100,pct||0)+'%',height:'100%',background:c,borderRadius:3,transition:'width .3s'}}/></div>;}
+function Toast({msg}){return msg?<div style={{position:'fixed',top:16,left:'50%',transform:'translateX(-50%)',background:'#22c55e',color:'#fff',padding:'6px 20px',borderRadius:8,fontSize:13,zIndex:999,fontWeight:600,boxShadow:'0 4px 12px rgba(0,0,0,.2)',pointerEvents:'none'}}>{msg}</div>:null;}
+function Locked({ok,children}){if(ok)return children;return<div className="relative"><div style={{opacity:.45,pointerEvents:'none'}}>{children}</div><div className="lock-overlay"><span style={{fontSize:11,color:'#9ca3af'}}>🔒</span></div></div>;}
+function InlineEdit({value,onSave,cls='text-xs',disabled=false}){const[ed,setEd]=useState(false);const[v,setV]=useState(value);useEffect(()=>{if(!ed)setV(value);},[value,ed]);if(disabled||!ed)return<span className={`${cls} ${disabled?'':'cursor-text'}`} onDoubleClick={()=>{if(!disabled){setV(value);setEd(true);}}}>{value}</span>;return<input className={`border-b border-indigo-400 outline-none px-1 bg-transparent ${cls}`} value={v} autoFocus onChange={e=>setV(e.target.value)} onClick={e=>e.stopPropagation()} onBlur={()=>{if(v.trim())onSave(v.trim());setEd(false);}} onKeyDown={e=>{if(e.key==='Enter'&&v.trim()){onSave(v.trim());setEd(false);}if(e.key==='Escape')setEd(false);}}/>;}
+function NumInput({value,onChange,className=''}){const[l,setL]=useState(String(value??''));useEffect(()=>setL(String(value??'')),[value]);return<input type="text" inputMode="numeric" className={className} value={l} onChange={e=>setL(e.target.value.replace(/[^0-9]/g,''))} onBlur={()=>{const n=l===''?0:Math.max(0,Math.min(9999,parseInt(l,10)));setL(String(n));onChange(n);}} onKeyDown={e=>e.key==='Enter'&&e.target.blur()}/>;}
+
+/* 修4：CtxMenu 的 onDelete 直接在關閉前不 trigger selCard */
+function CtxMenu({x,y,onArchive,onDelete,onClose}){
+  const r=useRef();
+  useEffect(()=>{const h=e=>{if(r.current&&!r.current.contains(e.target))onClose()};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[]);
+  return(
+    <div ref={r} className="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 py-1 min-w-36" style={{top:y,left:x}}>
+      <button className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50" onClick={()=>{onArchive();onClose();}}>📦 封存</button>
+      <hr className="my-1 border-gray-100"/>
+      <button className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50" onClick={()=>{onClose();onDelete();}}>🗑 刪除</button>
+    </div>
+  );
+}
+
+function MentionTA({value,onChange,members,curUser,placeholder,rows=3,className='',onCtrlEnter}){
+  const[popup,setPopup]=useState(null);const taRef=useRef(null);
+  const cands=popup?.type==='m'?(members||[]).filter(m=>m!==curUser&&m.toLowerCase().includes(popup.q)):[];
+  const hc=e=>{onChange(e.target.value);const pos=e.target.selectionStart;const before=e.target.value.slice(0,pos);const ma=before.match(/@(\S*)$/);if(ma)setPopup({type:'m',q:ma[1].toLowerCase(),at:pos-ma[0].length,cur:pos,rect:e.target.getBoundingClientRect()});else setPopup(null);};
+  const pick=text=>{const before=value.slice(0,popup.at);const after=value.slice(popup.cur);onChange(before+'@'+text+' '+after);setPopup(null);setTimeout(()=>{if(taRef.current){const p=before.length+1+text.length+1;taRef.current.setSelectionRange(p,p);taRef.current.focus();}},0);};
+  return<div className="relative w-full"><textarea ref={taRef} rows={rows} className={className} value={value} placeholder={placeholder} onChange={hc} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&onCtrlEnter){e.preventDefault();onCtrlEnter();}if(popup&&e.key==='Escape')setPopup(null);}} onBlur={()=>setTimeout(()=>setPopup(null),150)}/>
+    {popup&&cands.length>0&&<div className="mention-popup" style={{top:(popup.rect?.bottom??0)+4,left:(popup.rect?.left??0)+4}}>{cands.map(m=><button key={m} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 flex items-center gap-2" onMouseDown={e=>{e.preventDefault();pick(m);}}><span className={`w-5 h-5 rounded-full flex items-center justify-center font-bold text-xs ${mc(m,members)}`}>{m[0]}</span>{m}</button>)}</div>}
+  </div>;
+}
+function renderCmt(txt,members){if(!txt)return null;return txt.split(/(@\S+)/g).map((p,i)=>{if(p.startsWith('@')){const c=mc(p.slice(1),members||[]);return<span key={i} className={`rounded px-0.5 font-semibold ${c}`}>{p}</span>;}return<span key={i}>{p}</span>;});}
+
+function BellNotif({curUser,members,onOpen}){
+  const{notifs,ring,markRead,markAll,delNotif}=useNotifs(curUser);const[open,setOpen]=useState(false);const unread=notifs.filter(n=>!n.read).length;
+  const ref2=useRef();useEffect(()=>{if(!open)return;const h=e=>{if(ref2.current&&!ref2.current.contains(e.target))setOpen(false)};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[open]);
+  return<div className="relative" ref={ref2}><button onClick={()=>setOpen(v=>!v)} className={`relative p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 ${ring?'bell-ring':''}`}><span style={{fontSize:18}}>🔔</span>{unread>0&&<span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">{unread>9?'9+':unread}</span>}</button>
+    {open&&<div className="absolute right-0 top-9 w-80 bg-white rounded-xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-96"><div className="flex items-center justify-between px-4 py-3 border-b"><span className="font-bold text-sm text-gray-700">🔔 通知</span>{unread>0&&<button onClick={markAll} className="text-xs text-indigo-500 hover:underline">全部已讀</button>}</div><div className="flex-1 overflow-y-auto">{notifs.length===0&&<div className="text-center text-gray-400 text-xs py-8">沒有通知</div>}{notifs.map(n=><div key={n._key} className={`px-4 py-3 border-b text-xs flex gap-2 items-start hover:bg-gray-50 ${n.read?'opacity-60':''}`}><span className="flex-shrink-0 mt-0.5">{n.read?'💬':'🔵'}</span><div className="flex-1 min-w-0"><div className="font-semibold text-gray-700 truncate">{n.taskName}</div><div className="text-gray-500 mt-0.5">{n.author}：<span className="text-gray-700">{n.preview}</span></div><div className="text-gray-400 mt-0.5">{n.createdAt}</div>{n.taskId&&<button onClick={()=>{markRead(n._key);setOpen(false);onOpen&&onOpen(n.taskId)}} className="text-indigo-500 hover:underline mt-1">前往票卡 →</button>}</div><button onClick={()=>delNotif(n._key)} className="text-gray-300 hover:text-red-400 flex-shrink-0">✕</button></div>)}</div></div>}
+  </div>;
+}
+
+function QNPanel({curUser}){
+  const[open,setOpen]=useState(false);
+  const[notes,setNotes]=useState(()=>LS.get(NOTES_K(curUser),[]));
+  const[newT,setNewT]=useState('');const[col,setCol]=useState(0);
+  const lastSeenCount=useRef(notes.length);
+  const[hasNew,setHasNew]=useState(false);
+  const prev=useRef(curUser);
+  useEffect(()=>{if(prev.current!==curUser){prev.current=curUser;const n=LS.get(NOTES_K(curUser),[]);setNotes(n);lastSeenCount.current=n.length;setHasNew(false);}},[curUser]);
+  const handleToggle=()=>{setOpen(v=>{if(!v){lastSeenCount.current=notes.length;setHasNew(false);}return!v;});};
+  const add=()=>{if(!newT.trim())return;const n={id:uid(),text:newT.trim(),colorIdx:col,createdAt:nowFull()};const next=[n,...notes];setNotes(next);LS.set(NOTES_K(curUser),next);setNewT('');setHasNew(true);};
+  const del=id=>{const next=notes.filter(n=>n.id!==id);setNotes(next);LS.set(NOTES_K(curUser),next);};
+  return<>
+    <div className="qn-toggle" onClick={handleToggle} title="隨手記">
+      {hasNew&&!open&&<span className="note-dot mb-1"/>}
+      <span style={{fontSize:9,color:'#9ca3af',writingMode:'vertical-rl',letterSpacing:1}}>隨手記</span>
+      <span style={{fontSize:13,color:'#6b7280',lineHeight:1,marginTop:4}}>{open?'›':'‹'}</span>
+      {notes.length>0&&<span style={{fontSize:9,color:'#a5b4fc',marginTop:2}}>{notes.length}</span>}
+    </div>
+    <div className={`qn-panel${open?' open':''}`}><div style={{width:340,display:'flex',flexDirection:'column',height:'100%',overflow:'hidden'}}>
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-white flex-shrink-0">
+        <div className="flex items-center gap-2"><span className="font-bold text-sm text-gray-700">📝 隨手記</span>{notes.length>0&&<span className="bg-indigo-100 text-indigo-700 text-xs rounded-full px-1.5 py-0.5 font-medium">{notes.length}</span>}</div>
+        <button onClick={()=>setOpen(false)} className="text-gray-400 hover:text-gray-700 text-lg">✕</button>
+      </div>
+      <div className="px-3 py-3 border-b flex-shrink-0 bg-gray-50">
+        <div className="flex gap-1.5 mb-2">{QCOLORS.map((c,i)=><button key={i} onClick={()=>setCol(i)} style={{background:c.dot,width:18,height:18,borderRadius:'50%',border:i===col?'2px solid #374151':'2px solid transparent',flexShrink:0}}/>)}</div>
+        <textarea rows={3} className="w-full border rounded-lg px-2 py-2 text-xs resize-none outline-none focus:border-indigo-400" style={{background:QCOLORS[col].bg}} value={newT} placeholder="Ctrl+Enter 新增" onChange={e=>setNewT(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey))add();}}/>
+        <div className="flex items-center justify-between mt-1.5"><span className="text-xs text-gray-400">Ctrl+Enter</span><button onClick={add} disabled={!newT.trim()} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs disabled:opacity-40">新增</button></div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2" style={{minHeight:0}}>
+        {notes.length===0&&<div className="text-center text-gray-300 text-xs pt-10">尚無隨手記</div>}
+        {notes.map(n=>{const c=QCOLORS[n.colorIdx??0];return<div key={n.id} className="rounded-lg border text-xs group" style={{background:c.bg,borderColor:c.dot+'66'}}><div className="flex items-center gap-1.5 px-2 pt-1.5 pb-1"><span style={{width:8,height:8,borderRadius:'50%',background:c.dot,flexShrink:0}}/><span className="text-gray-400 flex-1 truncate">{n.createdAt}</span><button onClick={()=>del(n.id)} className="opacity-0 group-hover:opacity-100 text-red-400">✕</button></div><div className="px-2 pb-2 text-gray-700 whitespace-pre-wrap">{n.text}</div></div>;})}
+      </div>
+    </div></div>
+  </>;
+}
+
+/* ══ TaskDetailModal ══ */
+function TaskModal({task,statuses,tags,tagC,members,admins,rolePerms,updTask,onClose,curUser}){
+  const[nSub,setNSub]=useState('');const[cmt,setCmt]=useState('');const[docLbl,setDocLbl]=useState('');const[docUrl,setDocUrl]=useState('');const[showDoc,setShowDoc]=useState(false);
+  const roles=getRoles(task,curUser,admins);
+  const C=field=>can(task,curUser,admins,field,rolePerms);
+  const ov=isOD(task.dueDate)&&(statuses||[]).find(s=>s.id===task.statusId)?.label!=='完成';
+  const gc=id=>((statuses||[]).find(s=>s.id===id)||(statuses||[])[0]||{color:''}).color;
+  const addSub=()=>{if(!nSub.trim())return;updTask(task.id,{subtasks:[...(task.subtasks||[]),{id:uid(),name:nSub,statusId:(statuses||[])[0]?.id,createdAt:nowFull(),completedAt:null,startDate:today(),dueDate:''}]});setNSub('');};
+  const addCmt=()=>{if(!cmt.trim())return;const c2={id:uid(),author:curUser||'',text:cmt.trim(),createdAt:nowFull()};updTask(task.id,{comments:[...(task.comments||[]),c2]});[...cmt.matchAll(/@(\S+)/g)].map(m=>m[1]).forEach(name=>{if(name!==curUser&&(members||[]).includes(name))sendNotif(name,{taskId:task.id,taskName:task.name,author:curUser,preview:cmt.slice(0,40)});});setCmt('');};
+  const addDoc=()=>{if(!docUrl.trim())return;updTask(task.id,{docs:[...(task.docs||[]),{id:uid(),label:docLbl.trim()||docUrl.trim(),url:docUrl.trim()}]});setDocLbl('');setDocUrl('');setShowDoc(false);};
+  const setStatus=(id,sid)=>{const st=(statuses||[]).find(s=>s.id===sid);updTask(id,{statusId:sid,completedAt:st?.label==='完成'?nowFull():null});};
+  const F=(field,el)=><Locked ok={C(field)}>{el}</Locked>;
+  return(
+    <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center p-4" style={{zIndex:300}} onClick={onClose}>
+      <div className="bg-white rounded-xl shadow-2xl w-full flex overflow-hidden" style={{maxWidth:900,maxHeight:'90vh'}} onClick={e=>e.stopPropagation()}>
+        <div className="flex-1 flex flex-col overflow-y-auto border-r min-w-0">
+          <div className="flex items-start justify-between px-5 pt-4 pb-3 border-b flex-shrink-0">
+            <Locked ok={C('name')}><input className="font-bold text-base text-gray-800 border-none outline-none w-full" value={task.name} onChange={e=>updTask(task.id,{name:e.target.value})}/></Locked>
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl ml-3 flex-shrink-0">✕</button>
+          </div>
+          {roles.length>0&&<div className="px-5 py-2 flex flex-wrap gap-1.5 flex-shrink-0">
+            {roles.map(r=>{const ri2=ROLE_LABELS[r];return ri2?<span key={r} className={`inline-flex items-center gap-1 border rounded px-2 py-0.5 text-xs font-semibold ${ri2.c}`}>{ri2.icon} 你是{ri2.label}</span>:null;})}
+          </div>}
+          <div className="px-5 py-3 grid grid-cols-2 gap-x-4 gap-y-3 text-xs flex-shrink-0">
+            <div>{F('statusId',<div><label className="text-gray-400 block mb-0.5">狀態</label><select className={`w-full rounded px-2 py-1 ${gc(task.statusId)}`} value={task.statusId} onChange={e=>setStatus(task.id,e.target.value)}>{(statuses||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>)}</div>
+            <div>{F('urgency',<div><label className="text-gray-400 block mb-0.5">緊急程度</label><select className={`w-full rounded px-2 py-1 ${URG_C[task.urgency||'普通']}`} value={task.urgency||'普通'} onChange={e=>updTask(task.id,{urgency:e.target.value})}>{URG_OPTS.map(u=><option key={u.lb}>{u.lb}</option>)}</select></div>)}</div>
+            <div>{F('assignee',<div><label className="text-gray-400 block mb-0.5">負責人</label><select className="w-full border rounded px-2 py-1" value={task.assignee||''} onChange={e=>updTask(task.id,{assignee:e.target.value})}><option value=''>--</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select></div>)}</div>
+            <div>{F('follower',<div><label className="text-gray-400 block mb-0.5">追蹤者</label><select className="w-full border rounded px-2 py-1" value={task.follower||''} onChange={e=>updTask(task.id,{follower:e.target.value})}><option value=''>--</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select></div>)}</div>
+            <div>{F('collaborators',<div><label className="text-gray-400 block mb-0.5">協作者</label><select className="w-full border rounded px-2 py-1" value={''} onChange={e=>{if(e.target.value&&!(task.collaborators||[]).includes(e.target.value))updTask(task.id,{collaborators:[...(task.collaborators||[]),e.target.value]})}}><option value=''>+ 加入</option>{(members||[]).filter(m=>m!==task.assignee&&m!==task.follower&&!(task.collaborators||[]).includes(m)).map(m=><option key={m}>{m}</option>)}</select>{(task.collaborators||[]).length>0&&<div className="flex flex-wrap gap-1 mt-1">{(task.collaborators||[]).map(m=><span key={m} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${mc(m,members)}`}>{m}<button onClick={()=>updTask(task.id,{collaborators:(task.collaborators||[]).filter(x=>x!==m)})} className="hover:text-red-500">✕</button></span>)}</div>}</div>)}</div>
+            <div>{F('startDate',<div><label className="text-gray-400 block mb-0.5">開始</label><input type="date" className="w-full border rounded px-2 py-1" value={task.startDate||''} onChange={e=>updTask(task.id,{startDate:e.target.value})}/></div>)}</div>
+            <div className="col-span-2">{F('dueDate',<div><label className="text-gray-400 block mb-0.5">截止</label><input type="date" className={`w-full border rounded px-2 py-1 ${ov?'border-red-400 bg-red-50':''}`} value={task.dueDate||''} onChange={e=>updTask(task.id,{dueDate:e.target.value})}/>{ov&&<p className="text-red-500 mt-0.5">⚠ 已逾期</p>}</div>)}</div>
+            <div className="col-span-2">{F('tags',<div><label className="text-gray-400 block mb-1">組別</label><div className="flex flex-wrap gap-1">{(tags||[]).map(tag=><label key={tag} className={`flex items-center gap-1 rounded px-2 py-0.5 cursor-pointer ${(task.tags||[]).includes(tag)?((tagC||{})[tag]||'bg-gray-100'):'border hover:bg-gray-50'}`}><input type="checkbox" className="hidden" checked={(task.tags||[]).includes(tag)} onChange={e=>updTask(task.id,{tags:e.target.checked?[...(task.tags||[]),tag]:(task.tags||[]).filter(x=>x!==tag)})}/>{tag}</label>)}</div></div>)}</div>
+            <div className="col-span-2 text-gray-300 pt-1">建立：{task.createdAt}</div>
+          </div>
+          <div className="px-5 pb-3 border-t flex-shrink-0">
+            <div className="font-semibold text-xs text-gray-600 mt-3 mb-2">⏱ 追蹤天數</div>
+            <div className="flex items-center gap-4 bg-indigo-50 border border-indigo-100 rounded-lg p-3">
+              <div className="text-center flex-shrink-0"><div className="text-4xl font-extrabold text-indigo-600 leading-none">{trackDays(task)??'—'}</div><div className="text-xs text-indigo-400 mt-0.5">天</div></div>
+              <div className="flex-1 space-y-2 text-xs">
+                <div className="flex items-center gap-2"><span className="text-gray-400 w-14 flex-shrink-0">起始日</span><Locked ok={C('startDate')}><input type="date" className="border rounded px-2 py-1 bg-white text-xs" value={task.trackStart||task.startDate||task.createdAt?.slice(0,10)||''} onChange={e=>updTask(task.id,{trackStart:e.target.value})}/></Locked>{(task.trackStart&&task.trackStart!==task.startDate)&&<button onClick={()=>updTask(task.id,{trackStart:''})} className="text-gray-400 hover:text-red-400 text-xs">↺ 重設</button>}</div>
+                <div className="flex items-center gap-2"><span className="text-gray-400 w-14 flex-shrink-0">結束日</span>{task.completedAt?<span className="text-green-600 font-medium">{task.completedAt.slice(0,10)} ✅</span>:<span className="text-gray-400 italic">計時中</span>}</div>
+              </div>
+            </div>
+          </div>
+          <div className="px-5 pb-3 border-t flex-shrink-0">
+            <div className="font-semibold text-xs text-gray-600 mt-3 mb-2">📎 附件連結</div>
+            {(task.docs||[]).map(d=>(
+              <div key={d.id} className="flex items-center gap-2 bg-gray-50 border rounded px-2 py-1.5 text-xs group mb-1.5">
+                <span>🔗</span><a href={d.url} target="_blank" rel="noopener noreferrer" className="flex-1 text-indigo-600 hover:underline truncate">{d.label||d.url}</a>
+                {C('docs')&&<button onClick={()=>updTask(task.id,{docs:(task.docs||[]).filter(x=>x.id!==d.id)})} className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500">✕</button>}
+              </div>
+            ))}
+            {C('docs')&&(showDoc
+              ?<div className="space-y-1.5 border rounded p-2 bg-gray-50"><input className="w-full border rounded px-2 py-1 text-xs" placeholder="名稱（選填）" value={docLbl} onChange={e=>setDocLbl(e.target.value)}/><input className="w-full border rounded px-2 py-1 text-xs" placeholder="URL *" value={docUrl} onChange={e=>setDocUrl(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addDoc()} autoFocus/><div className="flex gap-1"><button onClick={addDoc} className="flex-1 bg-indigo-600 text-white py-1 rounded text-xs">新增</button><button onClick={()=>setShowDoc(false)} className="flex-1 border py-1 rounded text-xs">取消</button></div></div>
+              :<button onClick={()=>setShowDoc(true)} className="w-full border-dashed border-2 border-gray-200 rounded py-1.5 text-xs text-gray-400 hover:border-indigo-300 hover:text-indigo-500">＋ 新增附件</button>
+            )}
+          </div>
+          {C('subtasks')&&<div className="px-5 pb-4 border-t flex-1">
+            <div className="font-semibold text-xs text-gray-600 mt-3 mb-2">✅ 子任務</div>
+            {(task.subtasks||[]).map(sub=>(
+              <div key={sub.id} className="flex flex-col gap-1 mb-2 border rounded p-2 bg-gray-50 text-xs">
+                <div className="flex items-center gap-2"><select className={`rounded px-1 py-0.5 ${gc(sub.statusId)}`} value={sub.statusId} onChange={e=>{const st=(statuses||[]).find(s=>s.id===e.target.value);updTask(task.id,{subtasks:(task.subtasks||[]).map(s=>s.id===sub.id?{...s,statusId:e.target.value,completedAt:st?.label==='完成'?nowFull():null}:s)})}}>{(statuses||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><span className="flex-1">{sub.name}</span><button onClick={()=>updTask(task.id,{subtasks:(task.subtasks||[]).filter(s=>s.id!==sub.id)})} className="text-red-300 hover:text-red-500">🗑</button></div>
+                <div className="flex items-center gap-2 pl-1"><span className="text-gray-400">開始</span><input type="date" className="border rounded px-1 py-0.5" value={sub.startDate||''} onChange={e=>updTask(task.id,{subtasks:(task.subtasks||[]).map(s=>s.id===sub.id?{...s,startDate:e.target.value}:s)})}/><span className="text-gray-400">截止</span><input type="date" className={`border rounded px-1 py-0.5 ${isOD(sub.dueDate)?'border-red-300 bg-red-50':''}`} value={sub.dueDate||''} onChange={e=>updTask(task.id,{subtasks:(task.subtasks||[]).map(s=>s.id===sub.id?{...s,dueDate:e.target.value}:s)})}/></div>
+              </div>
+            ))}
+            {!(task.subtasks||[]).length&&<div className="text-xs text-gray-300 mb-2">尚無子任務</div>}
+            <div className="flex gap-2"><input className="flex-1 border rounded px-2 py-1 text-xs" value={nSub} onChange={e=>setNSub(e.target.value)} placeholder="新增子任務..." onKeyDown={e=>e.key==='Enter'&&addSub()}/><button onClick={addSub} className="bg-indigo-600 text-white px-2 rounded text-xs">新增</button></div>
+          </div>}
+        </div>
+        <div className="w-72 flex-shrink-0 flex flex-col bg-gray-50" style={{minHeight:0}}>
+          <div className="px-4 py-3 border-b font-semibold text-xs text-gray-600 flex-shrink-0 flex items-center gap-1">💬 留言{(task.comments||[]).length>0&&<span className="ml-1 text-gray-400">({(task.comments||[]).length})</span>}</div>
+          <div className="flex-1 overflow-y-auto px-3 py-2 space-y-2" style={{minHeight:0}}>
+            {!(task.comments||[]).length&&<div className="text-center text-gray-300 text-xs pt-8">尚無留言</div>}
+            {(task.comments||[]).map(c2=>(
+              <div key={c2.id} className="bg-white border rounded-lg px-3 py-2 text-xs group shadow-sm">
+                <div className="flex items-center gap-1.5 mb-1"><span className={`rounded-full px-1.5 py-0.5 font-semibold text-xs ${mc(c2.author,members||[])}`}>{c2.author||'匿名'}</span><span className="text-gray-400 flex-1 truncate">{c2.createdAt}</span>{C('comments')&&<button onClick={()=>updTask(task.id,{comments:(task.comments||[]).filter(x=>x.id!==c2.id)})} className="opacity-0 group-hover:opacity-100 text-red-300 hover:text-red-500 text-xs">✕</button>}</div>
+                <div className="text-gray-700 whitespace-pre-wrap">{renderCmt(c2.text,members)}</div>
+              </div>
+            ))}
+          </div>
+          {C('comments')&&<div className="border-t flex-shrink-0 p-3"><div className="flex items-center gap-1.5 mb-1.5"><span className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${mc(curUser,members||[])}`}>{curUser}</span><span className="text-xs text-gray-400">留言</span></div><MentionTA className="w-full border rounded-lg px-2 py-1.5 text-xs resize-none outline-none bg-white" rows={3} placeholder="輸入留言... @人員 (Ctrl+Enter)" value={cmt} onChange={setCmt} members={members} curUser={curUser} onCtrlEnter={addCmt}/><button onClick={addCmt} disabled={!cmt.trim()} className="mt-1.5 w-full bg-indigo-600 text-white py-1.5 rounded-lg text-xs font-medium disabled:opacity-40">送出</button></div>}
+          {!C('comments')&&<div className="border-t p-3 text-xs text-gray-400 text-center">🔒 無留言權限</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DemotePopup({childNodes,onPick,onClose}){const r=useRef();useEffect(()=>{const h=e=>{if(r.current&&!r.current.contains(e.target))onClose()};document.addEventListener('mousedown',h);return()=>document.removeEventListener('mousedown',h)},[]);return<div ref={r} className="absolute z-50 bg-white border border-gray-200 rounded-lg shadow-xl py-1 min-w-36" style={{bottom:'100%',left:0,marginBottom:4}}><div className="px-3 py-1 text-xs text-gray-400 border-b">↓ 下放至子節點</div>{childNodes.map(n=><button key={n.id} className="w-full text-left px-3 py-1.5 text-xs hover:bg-indigo-50 text-gray-700" onClick={()=>onPick(n.id)}>📁 {n.name}</button>)}</div>;}
+
+function BoardCard({card,nodes,curNodeId,statuses,tagC,members,admins,curUser,onOpen,onPro,onDem,onArc,onDel,isDragging,setDragCardId}){
+  const[showDem,setShowDem]=useState(false);const[ctxM,setCtxM]=useState(null);
+  const curNode=(nodes||{})[curNodeId];const childNodes=(curNode?.children||[]).map(id=>(nodes||{})[id]).filter(Boolean);
+  // 修1：根節點（parentId===null）的字卡不顯示上傳箭頭
+  const curNodeIsRoot=curNodeId&&(nodes||{})[curNodeId]?.parentId===null;
+  const canPro=!!curNodeId&&!curNodeIsRoot;const canDem=childNodes.length>0;
+  const ov=isOD(card.dueDate)&&(statuses||[]).find(s=>s.id===card.statusId)?.label!=='完成';
+  const d=trackDays(card);
+  const role=getRole(card,curUser,admins);const ri=role?ROLE_LABELS[role]:null;
+  return(
+    <div
+      draggable
+      onDragStart={e=>{e.dataTransfer.setData('cardId',card.id);e.dataTransfer.effectAllowed='move';setDragCardId(card.id);}}
+      onDragEnd={()=>setDragCardId(null)}
+      className={`bg-white rounded-lg shadow-sm border border-gray-100 p-2.5 cursor-grab hover:shadow-md relative group transition-all select-none ${ov?'border-l-4 border-l-red-400':''} ${isDragging?'board-card-dragging':''}`}
+      onClick={e=>{if(isDragging)return;onOpen(card);}}
+      onContextMenu={e=>{e.preventDefault();e.stopPropagation();setCtxM({x:e.clientX,y:e.clientY});}}>
+      <button className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-gray-400 px-1 text-sm" onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxM({x:r.left,y:r.bottom+4});}}>⋯</button>
+      <div className="font-medium text-xs mb-1 pr-5 flex items-center gap-1 flex-wrap leading-snug">{card.name}<UBadge u={card.urgency}/>{ov&&<span className="text-red-500">⚠</span>}{ri&&<span className={`text-xs border rounded px-1 ${ri.c}`}>{ri.icon}</span>}</div>
+      <div className="flex flex-wrap gap-1 mb-1">{(card.tags||[]).map(t=><span key={t} className={`text-xs rounded px-1 ${(tagC||{})[t]||'bg-gray-100 text-gray-600'}`}>{t}</span>)}</div>
+      {d!==null&&<div className="text-xs text-indigo-500 mt-0.5">⏱ {d}天</div>}
+      <div className="text-xs text-gray-500 flex gap-2 flex-wrap mt-0.5">{card.assignee&&<span>👤{card.assignee}</span>}{card.dueDate&&<span className={ov?'text-red-500 font-medium':''}>{fmt(card.dueDate)}</span>}{(card.subtasks||[]).length>0&&<span>✅{(card.subtasks||[]).filter(s=>s.completedAt).length}/{(card.subtasks||[]).length}</span>}{(card.comments||[]).length>0&&<span>💬{(card.comments||[]).length}</span>}</div>
+      {(canPro||canDem)&&<div className="flex gap-1 mt-1.5 relative" onClick={e=>e.stopPropagation()}>{canPro&&<button onClick={()=>onPro(card.id)} className="flex-1 text-xs border border-green-300 bg-green-50 text-green-700 rounded py-0.5 hover:bg-green-100 font-bold">↑</button>}{canDem&&<div className="flex-1 relative"><button onClick={()=>setShowDem(v=>!v)} className="w-full text-xs border border-amber-300 bg-amber-50 text-amber-700 rounded py-0.5 hover:bg-amber-100 font-bold">↓</button>{showDem&&<DemotePopup childNodes={childNodes} onPick={cid=>{onDem(card.id,cid);setShowDem(false);}} onClose={()=>setShowDem(false)}/>}</div>}</div>}
+      {ctxM&&<CtxMenu x={ctxM.x} y={ctxM.y} onArchive={()=>onArc(card.id)} onDelete={()=>onDel(card.id)} onClose={()=>setCtxM(null)}/>}
+    </div>
+  );
+}
+
+/* 修2：新增卡片後自動開啟 modal；修1：curUser 預設負責人 */
+function BoardCol({st,visCards,nodes,curNodeId,statuses,tagC,members,admins,curUser,updCard,setSelCard,handlePromote,handleDemote,arcCard,delCard,dragCardId,setDragCardId,onDragEnterCol,onDragLeaveCol,isDropTarget}){
+  const[adding,setAdding]=useState(false);
+  const[addName,setAddName]=useState('');
+  const col=visCards.filter(c=>c.statusId===st.id);
+  const doAdd=()=>{
+    if(!addName.trim()||!curNodeId)return;
+    const id='c_'+uid();
+    const newCard={id,name:addName.trim(),nodeId:curNodeId,statusId:st.id,urgency:'普通',assignee:curUser||'',follower:'',collaborators:[],startDate:today(),dueDate:'',tags:[],docs:[],comments:[],createdAt:nowFull(),completedAt:null,subtasks:[],archived:false,projectNote:'',trackStart:''};
+    updCard(id,newCard,true);
+    setAddName('');setAdding(false);
+    // 修2：新增後立即開啟 modal
+    setTimeout(()=>setSelCard(newCard),80);
+  };
+  const handleDragOver=e=>{e.preventDefault();e.dataTransfer.dropEffect='move';};
+  const handleDrop=e=>{
+    e.preventDefault();
+    const cid=e.dataTransfer.getData('cardId');
+    if(cid){const s2=(statuses||[]).find(s=>s.id===st.id);updCard(cid,{statusId:st.id,completedAt:s2?.label==='完成'?nowFull():null});}
+    onDragLeaveCol();
+  };
+  return(
+    <div className="flex-shrink-0 w-64 flex flex-col"
+      onDragOver={handleDragOver}
+      onDragEnter={e=>{e.preventDefault();onDragEnterCol(st.id);}}
+      onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))onDragLeaveCol();}}
+      onDrop={handleDrop}>
+      <div className={`flex items-center justify-between px-2 py-1.5 rounded-t font-semibold text-xs mb-1 transition-all ${st.color} ${isDropTarget?'ring-2 ring-indigo-400 ring-offset-1':''}`}>
+        <span>{st.label}</span><span className="bg-white bg-opacity-60 rounded-full px-1.5">{col.length}</span>
+      </div>
+      <div className={`flex-1 rounded-b p-1.5 space-y-1.5 min-h-20 transition-colors ${isDropTarget?'drop-col-highlight':'bg-gray-50'}`}>
+        {col.map(c=>(
+          <BoardCard key={c.id} card={c} nodes={nodes} curNodeId={curNodeId} statuses={statuses} tagC={tagC} members={members} admins={admins} curUser={curUser} onOpen={setSelCard} onPro={handlePromote} onDem={handleDemote} onArc={arcCard} onDel={delCard} isDragging={dragCardId===c.id} setDragCardId={setDragCardId}/>
+        ))}
+        {isDropTarget&&col.length===0&&<div className="flex items-center justify-center py-6 text-xs text-indigo-400 font-medium pointer-events-none rounded-lg border-2 border-dashed border-indigo-300">⬇ 放開移至「{st.label}」</div>}
+      </div>
+      {adding
+        ?<div className="mt-1 bg-white rounded shadow p-2 space-y-1.5">
+          <input autoFocus className="w-full border rounded px-2 py-1.5 text-xs outline-none" placeholder="任務名稱..." value={addName} onChange={e=>setAddName(e.target.value)} onKeyDown={e=>{if(e.key==='Enter')doAdd();if(e.key==='Escape'){setAdding(false);setAddName('');}}}/>
+          <div className="flex gap-1">
+            <button onClick={doAdd} className="bg-indigo-600 text-white px-2.5 py-1 rounded text-xs">新增</button>
+            <button onClick={()=>{setAdding(false);setAddName('');}} className="text-gray-400 px-1 text-lg">✕</button>
+          </div>
+        </div>
+        :<button onClick={()=>setAdding(true)} className="mt-1 w-full flex items-center gap-1 px-2 py-1.5 rounded text-xs text-gray-400 hover:bg-gray-200 hover:text-gray-600"><span className="text-base">＋</span> 新增任務</button>
+      }
+    </div>
+  );
+}
+
+/* 修1：CardRow 接收 curUser，確保權限正確 */
+function CardRow({card,nodes,curNodeId,statuses,tagC,members,admins,curUser,onOpen,onPro,onDem,onArc,onDel}){
+  const[showDem,setShowDem]=useState(false);const[ctxM,setCtxM]=useState(null);
+  const curNode=(nodes||{})[curNodeId];const childNodes=(curNode?.children||[]).map(id=>(nodes||{})[id]).filter(Boolean);
+  // 修1：根節點的字卡不顯示上傳箭頭
+  const curNodeIsRoot2=curNodeId&&(nodes||{})[curNodeId]?.parentId===null;
+  const canPro=!!curNodeId&&!curNodeIsRoot2;const canDem=childNodes.length>0;
+  const ov=isOD(card.dueDate)&&(statuses||[]).find(s=>s.id===card.statusId)?.label!=='完成';
+  const gc=id=>((statuses||[]).find(s=>s.id===id)||(statuses||[])[0]||{color:''}).color;
+  const d=trackDays(card);
+  const role=getRole(card,curUser,admins);const ri=role?ROLE_LABELS[role]:null;
+  return(
+    <tr className={`border-t cursor-pointer ${ov?'bg-red-50/40 hover:bg-red-50':'hover:bg-indigo-50'}`}>
+      <td className="p-2 font-medium" onClick={()=>onOpen(card)}><div className="flex items-center gap-1 flex-wrap">{card.name}{ov&&<span className="text-red-500 text-xs">⚠</span>}{ri&&<span className={`text-xs border rounded px-1 ${ri.c}`}>{ri.icon}</span>}</div></td>
+      <td className="p-2 text-center whitespace-nowrap"><span className={`rounded px-1.5 py-0.5 text-xs ${gc(card.statusId)}`}>{(statuses||[]).find(s=>s.id===card.statusId)?.label||'—'}</span></td>
+      <td className="p-2 text-center"><UBadge u={card.urgency}/></td>
+      <td className="p-2 text-center text-xs">{card.assignee||'—'}</td>
+      <td className="p-2 text-center text-xs text-gray-500">{card.startDate?fmt(card.startDate):'—'}</td>
+      <td className={`p-2 text-center text-xs ${ov?'text-red-500 font-medium':''}`}>{card.dueDate?fmt(card.dueDate):'—'}</td>
+      <td className="p-2"><div className="flex flex-wrap gap-1">{(card.tags||[]).map(t=><span key={t} className={`rounded px-1 text-xs ${(tagC||{})[t]||'bg-gray-100 text-gray-600'}`}>{t}</span>)}</div></td>
+      <td className="p-2 text-center text-xs">{d!==null?`⏱${d}d`:'—'}</td>
+      <td className="p-2 text-center" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-center gap-1 relative">
+          {canPro&&<button onClick={()=>onPro(card.id)} className="text-green-600 hover:bg-green-100 rounded px-1.5 text-xs font-bold border border-green-200">↑</button>}
+          {canDem&&<div className="relative"><button onClick={()=>setShowDem(v=>!v)} className="text-amber-600 hover:bg-amber-100 rounded px-1.5 text-xs font-bold border border-amber-200">↓</button>{showDem&&<DemotePopup childNodes={childNodes} onPick={cid=>{onDem(card.id,cid);setShowDem(false);}} onClose={()=>setShowDem(false)}/>}</div>}
+          <button onClick={e=>{e.stopPropagation();const r=e.currentTarget.getBoundingClientRect();setCtxM({x:r.left,y:r.bottom+2});}} className="text-gray-400 hover:text-gray-700 px-1 text-base">⋯</button>
+          {ctxM&&<CtxMenu x={ctxM.x} y={ctxM.y} onArchive={()=>onArc(card.id)} onDelete={()=>onDel(card.id)} onClose={()=>setCtxM(null)}/>}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+/* 修1：ListStatusGroup 傳入 curUser；修2：新增後自動開啟 modal */
+function ListStatusGroup({st,stCards,nodes,curNid,statuses,tagC,members,admins,curUser,setSelCard,handlePro,handleDem,arcCard,delCard,updCard}){
+  const[collapsed,setCollapsed]=useState(false);
+  if(stCards.length===0)return null;
+  const doAdd=()=>{
+    const id='c_'+uid();
+    const newCard={id,name:'新任務',nodeId:curNid,statusId:st.id,urgency:'普通',assignee:curUser||'',follower:'',collaborators:[],startDate:today(),dueDate:'',tags:[],docs:[],comments:[],createdAt:nowFull(),completedAt:null,subtasks:[],archived:false,projectNote:'',trackStart:''};
+    updCard(id,newCard,true);
+    setTimeout(()=>setSelCard(newCard),80);
+  };
+  return(
+    <div className="bg-white rounded-xl shadow overflow-hidden">
+      <div className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer select-none ${st.color}`} onClick={()=>setCollapsed(v=>!v)}>
+        <span className="rounded-full px-3 py-0.5 text-xs font-bold bg-white bg-opacity-60">{st.label}</span>
+        <span className="text-xs font-medium opacity-80">{stCards.length} 筆</span>
+        <span className="ml-auto text-xs opacity-70">{collapsed?'▶':'▼'}</span>
+      </div>
+      {!collapsed&&<table className="w-full text-xs border-collapse table-fixed">
+        <colgroup><col style={{width:'22%'}}/><col style={{width:'9%'}}/><col style={{width:'7%'}}/><col style={{width:'9%'}}/><col style={{width:'8%'}}/><col style={{width:'8%'}}/><col style={{width:'14%'}}/><col style={{width:'7%'}}/><col style={{width:'10%'}}/></colgroup>
+        <thead className="bg-gray-50 text-gray-500"><tr><th className="p-2 text-left border-b">名稱</th><th className="p-2 border-b">狀態</th><th className="p-2 border-b">緊急</th><th className="p-2 border-b">負責人</th><th className="p-2 border-b">開始</th><th className="p-2 border-b">截止</th><th className="p-2 border-b">組別</th><th className="p-2 border-b">天數</th><th className="p-2 border-b">操作</th></tr></thead>
+        <tbody>
+          {stCards.map(c=>(
+            <CardRow key={c.id} card={c} nodes={nodes} curNodeId={curNid} statuses={statuses} tagC={tagC} members={members} admins={admins} curUser={curUser} onOpen={setSelCard} onPro={handlePro} onDem={handleDem} onArc={arcCard} onDel={delCard}/>
+          ))}
+          {curNid&&<tr className="border-t"><td colSpan={9}><button onClick={doAdd} className="w-full flex items-center gap-1 px-3 py-2 text-xs text-gray-400 hover:bg-indigo-50 hover:text-indigo-600"><span className="text-base">＋</span> 在「{st.label}」新增任務</button></td></tr>}
+        </tbody>
+      </table>}
+    </div>
+  );
+}
+
+function GanttView({cards,nodes,nid,statuses,onOpen,onDrop,allCards,groupByChild=false}){
+  const td=today();const[ws,setWs]=useState(()=>addD(td,-7));const[scale,setScale]=useState(75);
+  const DAYS=180;const COL=Math.round(COL_W*scale/100);
+  const dRef=useRef([]);
+  const dates=useMemo(()=>{const arr=Array.from({length:DAYS},(_,i)=>addD(ws,i));dRef.current=arr;return arr;},[ws]);
+  const sRef=useRef(null);const panRef=useRef(null);const dragSt=useRef(null);const[prev,setPrev]=useState(null);
+  const{rows,groups}=useMemo(()=>{
+    if(groupByChild&&nid&&nodes&&(nodes[nid]?.children||[]).length>0){
+      const childIds=nodes[nid].children||[];
+      const gs=childIds.map((cid,idx)=>{const cn=nodes[cid];if(!cn)return null;return{nodeId:cid,nodeName:cn.name,colorIdx:idx,cards:subtreeCards(nodes,cards||{},cid)};}).filter(Boolean);
+      const rootOwn=nodeCards(nodes,cards||{},nid);const allRows=[];
+      if(rootOwn.length>0){allRows.push({t:'header',label:`📁 ${nodes[nid]?.name||''}（直屬）`,colorIdx:-1});rootOwn.forEach(c=>{allRows.push({t:'c',card:c,colorIdx:-1});(c.subtasks||[]).forEach(sub=>allRows.push({t:'s',card:c,sub,colorIdx:-1}));});}
+      gs.forEach(g=>{allRows.push({t:'header',label:`📁 ${g.nodeName}`,colorIdx:g.colorIdx});g.cards.forEach(c=>{allRows.push({t:'c',card:c,colorIdx:g.colorIdx});(c.subtasks||[]).forEach(sub=>allRows.push({t:'s',card:c,sub,colorIdx:g.colorIdx}));});});
+      return{rows:allRows,groups:gs};
+    }
+    const vis=allCards||nodeCards(nodes||{},cards||{},nid);const r=[];vis.forEach(c=>{r.push({t:'c',card:c,colorIdx:0});(c.subtasks||[]).forEach(sub=>r.push({t:'s',card:c,sub,colorIdx:0}));});return{rows:r,groups:[]};
+  },[groupByChild,nid,nodes,cards,allCards]);
+  useEffect(()=>{if(!sRef.current)return;const i=dRef.current.indexOf(td);if(i>=0)sRef.current.scrollLeft=Math.max(0,i*COL-COL*5);},[ws,COL]);
+  const xDate=useCallback(cx=>{if(!sRef.current)return null;const r=sRef.current.getBoundingClientRect();return addD(ws,Math.floor((cx-r.left+sRef.current.scrollLeft-LBL_W)/COL));},[COL,ws]);
+  const bPos=useCallback((s,e_)=>{if(!s&&!e_)return null;if(s&&e_){const so=dDiff(ws,s);const eo=dDiff(ws,e_);return{left:LBL_W+so*COL,width:Math.max(COL,(eo-so+1)*COL)};}const o=dDiff(ws,s||e_);return{left:LBL_W+o*COL,width:COL};},[ws,COL]);
+  const onMD=useCallback(e=>{
+    const hEl=e.target.closest('[data-gh]');const bEl=e.target.closest('[data-gb]');
+    if(!hEl&&!bEl){if(!sRef.current)return;panRef.current=e.clientX;sRef.current.style.cursor='grabbing';e.preventDefault();return;}
+    const el=hEl||bEl;const bk=el.dataset.gb||el.dataset.gh;const parts=bk.split('::');const cid=parts[0];const sid=parts[1]||null;const ht=hEl?el.dataset.ht:null;
+    const allV=allCards||Object.values(cards||{}).filter(c=>!c.archived);const card=allV.find(c=>c.id===cid);if(!card)return;
+    const target=sid?(card.subtasks||[]).find(s=>s.id===sid):card;if(!target)return;
+    dragSt.current={type:ht==='l'?'resize-l':ht==='r'?'resize-r':'move',cid,sid,origS:target.startDate,origE:target.dueDate,startX:e.clientX,startY:e.clientY,moved:false,card};
+    setPrev({cid,sid,start:target.startDate,end:target.dueDate});e.preventDefault();
+  },[allCards,cards]);
+  const onMM=useCallback(e=>{
+    if(dragSt.current){const ds=dragSt.current;const dist=Math.abs(e.clientX-ds.startX)+Math.abs(e.clientY-ds.startY);if(dist>4)ds.moved=true;if(!ds.moved)return;const cd=xDate(e.clientX);if(!cd)return;const dd=dDiff(xDate(ds.startX)||ds.origS,cd);let ns=ds.origS,ne=ds.origE;if(ds.type==='move'){ns=ds.origS?addD(ds.origS,dd):null;ne=ds.origE?addD(ds.origE,dd):null;}else if(ds.type==='resize-l'){ns=ds.origS?addD(ds.origS,dd):null;if(ns&&ne&&ns>=ne)ns=addD(ne,-1);}else if(ds.type==='resize-r'){ne=ds.origE?addD(ds.origE,dd):null;if(ns&&ne&&ne<=ns)ne=addD(ns,1);}setPrev({cid:ds.cid,sid:ds.sid,start:ns,end:ne});return;}
+    if(panRef.current!==null&&sRef.current){sRef.current.scrollLeft-=e.clientX-panRef.current;panRef.current=e.clientX;}
+  },[xDate]);
+  const onMU=useCallback(()=>{if(dragSt.current){const ds=dragSt.current;if(!ds.moved){if(!ds.sid)onOpen(ds.card);}else if(prev){onDrop(ds.cid,ds.sid,prev.start,prev.end);}dragSt.current=null;setPrev(null);return;}if(panRef.current!==null){panRef.current=null;if(sRef.current)sRef.current.style.cursor='grab';}},[prev,onDrop,onOpen]);
+  useEffect(()=>{window.addEventListener('mousemove',onMM);window.addEventListener('mouseup',onMU);return()=>{window.removeEventListener('mousemove',onMM);window.removeEventListener('mouseup',onMU);};},[onMM,onMU]);
+  const gc=id=>((statuses||[]).find(s=>s.id===id)||(statuses||[])[0]||{color:''}).color;
+  return<div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 220px)'}}>
+    <div className="flex items-center gap-2 mb-2 flex-wrap flex-shrink-0">
+      <button onClick={()=>setWs(p=>addD(p,-30))} className="text-xs border rounded px-2 py-1 hover:bg-gray-100">‹‹</button>
+      <button onClick={()=>setWs(addD(td,-7))} className="text-xs border rounded px-2 py-1 hover:bg-gray-100">今天</button>
+      <button onClick={()=>setWs(p=>addD(p,30))} className="text-xs border rounded px-2 py-1 hover:bg-gray-100">››</button>
+      <span className="text-xs text-gray-400">{dates[0]} ～ {dates[dates.length-1]}</span>
+      {groupByChild&&groups.length>0&&<div className="flex gap-2 ml-2 flex-wrap">{groups.map((g,i)=><span key={g.nodeId} className="flex items-center gap-1 text-xs"><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:nodeColor(i),flexShrink:0}}/>{g.nodeName}</span>)}</div>}
+      <div className="flex items-center gap-1 ml-auto"><span className="text-xs text-gray-500">縮放</span><select className="border rounded px-1 py-1 text-xs" value={scale} onChange={e=>setScale(Number(e.target.value))}>{[{v:50,l:'50%'},{v:75,l:'75%'},{v:100,l:'100%'},{v:125,l:'125%'}].map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select></div>
+    </div>
+    <div className="bg-white rounded shadow flex-1 overflow-hidden">
+      <div ref={sRef} className="h-full overflow-auto" style={{cursor:'grab',userSelect:'none'}} onMouseDown={onMD}>
+        <div style={{minWidth:LBL_W+DAYS*COL,position:'relative'}}>
+          <div className="flex sticky top-0 z-20 border-b" style={{background:'#fff'}}>
+            <div className="border-r px-3 py-2 text-xs font-bold flex-shrink-0 sticky left-0 z-30" style={{width:LBL_W,minWidth:LBL_W,background:'#f3f4f6'}}>任務</div>
+            {dates.map((d,i)=>{const isT=d===td;const hol=isHol(d);const sm=i===0||d.slice(8)==='01';return<div key={d} style={{width:COL,minWidth:COL}} className={`border-r text-center py-1 text-xs flex-shrink-0 ${isT?'bg-indigo-100 text-indigo-700 font-bold':hol?'bg-red-50 text-red-500':isWknd(d)?'bg-gray-50 text-gray-400':''}`}>{sm&&<div className="text-indigo-600 font-bold text-xs leading-none">{d.slice(5,7)}月</div>}<div>{d.slice(8)}</div></div>;})}
+          </div>
+          {rows.map((row,ri2)=>{
+            if(row.t==='header'){const col=row.colorIdx>=0?nodeColor(row.colorIdx):'#6366f1';return<div key={`hdr-${ri2}`} style={{height:28,display:'flex',alignItems:'center',background:'#f8fafc',borderBottom:'2px solid '+col,position:'relative'}}><div className="border-r px-3 flex items-center gap-2 h-full sticky left-0" style={{width:LBL_W,minWidth:LBL_W,background:'#f8fafc',zIndex:14}}><span style={{display:'inline-block',width:10,height:10,borderRadius:2,background:col,flexShrink:0}}/><span className="font-bold text-xs" style={{color:col}}>{row.label}</span></div>{dates.map(d=><div key={d} style={{width:COL,minWidth:COL,background:isHol(d)?'#fef2f2':isWknd(d)?'#fafafa':'',borderRight:'1px solid #f3f4f6'}}/>)}</div>;}
+            const pv=prev&&prev.cid===row.card.id&&prev.sid===(row.t==='s'?row.sub.id:null)?prev:null;
+            const barColor=groupByChild&&row.colorIdx>=0?nodeColor(row.colorIdx):'#6366f1';
+            if(row.t==='c'){const c=row.card;const ov=isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成';const sd=pv?pv.start:c.startDate;const ed=pv?pv.end:c.dueDate;const pos=bPos(sd,ed);
+              return<div key={c.id+ri2} style={{height:ROW_H,position:'relative'}} className="flex items-center border-b hover:bg-gray-50">
+                <div className="border-r px-2 text-xs truncate flex-shrink-0 flex items-center gap-1 h-full sticky left-0" style={{width:LBL_W,minWidth:LBL_W,background:'#fff',zIndex:15}}><span className="truncate cursor-pointer hover:text-indigo-600" onClick={()=>onOpen(c)}>{c.name}</span><UBadge u={c.urgency}/></div>
+                {pos&&<div data-gb={c.id} style={{position:'absolute',left:pos.left,width:pos.width,height:22,top:(ROW_H-22)/2,background:pv?'#818cf8':(ov?'#ef4444':barColor),borderRadius:4,zIndex:5,opacity:pv?.85:1,cursor:'grab'}} className="gantt-bar select-none">
+                  <div className="gantt-handle gantt-handle-l" data-gh={c.id} data-ht="l"/>
+                  <span className="text-white truncate px-2 pointer-events-none" style={{fontSize:9,flex:1,overflow:'hidden'}}>{c.name}</span>
+                  <div className="gantt-handle gantt-handle-r" data-gh={c.id} data-ht="r"/>
+                </div>}
+              </div>;}
+            const{card,sub}=row;const ov2=isOD(sub.dueDate);const sd2=pv?pv.start:sub.startDate;const ed2=pv?pv.end:sub.dueDate;const pos2=bPos(sd2,ed2);
+            return<div key={sub.id+ri2} style={{height:ROW_H,position:'relative'}} className="flex items-center border-b bg-gray-50/60">
+              <div className="border-r px-2 text-xs truncate flex-shrink-0 flex items-center gap-1 h-full sticky left-0" style={{width:LBL_W,minWidth:LBL_W,background:'#f9fafb',zIndex:15}}><span className="w-4 text-gray-300 text-center">└</span><span className="truncate text-gray-600">{sub.name}</span><span className={`text-xs rounded px-1 ${gc(sub.statusId)}`}>{(statuses||[]).find(s=>s.id===sub.statusId)?.label||''}</span></div>
+              {pos2&&<div data-gb={`${card.id}::${sub.id}`} style={{position:'absolute',left:pos2.left,width:pos2.width,height:14,top:(ROW_H-14)/2,background:pv?'#a5b4fc':(ov2?'#fca5a5':'#a5b4fc'),borderRadius:3,zIndex:5,opacity:pv?.85:1,cursor:'grab'}} className="gantt-bar select-none">
+                <div style={{position:'absolute',top:0,bottom:0,left:0,width:5,cursor:'ew-resize',zIndex:2,borderRadius:'3px 0 0 3px'}} data-gh={`${card.id}::${sub.id}`} data-ht="l"/>
+                {pos2.width>40&&<span style={{fontSize:8,flex:1,overflow:'hidden',padding:'0 6px',color:'#312e81',pointerEvents:'none',whiteSpace:'nowrap',textOverflow:'ellipsis'}}>{sub.name}</span>}
+                <div style={{position:'absolute',top:0,bottom:0,right:0,width:5,cursor:'ew-resize',zIndex:2,borderRadius:'0 3px 3px 0'}} data-gh={`${card.id}::${sub.id}`} data-ht="r"/>
+              </div>}
+            </div>;
+          })}
+          {!rows.filter(r=>r.t!=='header').length&&<div className="text-center text-gray-400 py-16">目前沒有任務</div>}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function CalView({cards,nodes,nid,statuses,tagC,onOpen,addCard}){
+  const td2=today();const[calM,setCalM]=useState(new Date().getMonth());const[calY,setCalY]=useState(new Date().getFullYear());
+  const vis=nodeCards(nodes||{},cards||{},nid);
+  const byDate=useMemo(()=>{const m={};vis.forEach(c=>{if(c.dueDate){if(!m[c.dueDate])m[c.dueDate]=[];m[c.dueDate].push(c);}});return m;},[vis]);
+  const info={first:new Date(calY,calM,1).getDay(),total:new Date(calY,calM+1,0).getDate()};
+  const gc=id=>((statuses||[]).find(s=>s.id===id)||(statuses||[])[0]||{color:''}).color;
+  const cells=[];const pm=calM===0?12:calM,py=calM===0?calY-1:calY,pmt=new Date(py,pm-1+1,0).getDate();
+  for(let i=info.first-1;i>=0;i--){const d=pmt-i;const ds=`${py}-${String(pm).padStart(2,'0')}-${String(d).padStart(2,'0')}`;cells.push({d,ds,fade:true,tasks:[]});}
+  for(let i=1;i<=info.total;i++){const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;cells.push({d:i,ds,fade:false,isT:ds===td2,hol:isHol(ds),wknd:isWknd(ds),tasks:byDate[ds]||[]});}
+  const rem=(7-cells.length%7)%7;const nm2=calM===11?1:calM+2;const ny2=calM===11?calY+1:calY;
+  for(let i=1;i<=rem;i++){const ds=`${ny2}-${String(nm2).padStart(2,'0')}-${String(i).padStart(2,'0')}`;cells.push({d:i,ds,fade:true,tasks:[]});}
+  const MN=['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+  return<div><div className="flex items-center gap-3 mb-3 select-none"><button onClick={()=>{if(calM===0){setCalM(11);setCalY(y=>y-1);}else setCalM(m=>m-1)}} className="border rounded px-2 py-1 text-sm hover:bg-gray-100">‹</button><span className="font-bold text-base min-w-28 text-center">{calY}年 {MN[calM]}</span><button onClick={()=>{if(calM===11){setCalM(0);setCalY(y=>y+1);}else setCalM(m=>m+1)}} className="border rounded px-2 py-1 text-sm hover:bg-gray-100">›</button><button onClick={()=>{setCalM(new Date().getMonth());setCalY(new Date().getFullYear())}} className="border rounded px-2 py-1 text-xs text-gray-500 hover:bg-gray-100">本月</button></div>
+    <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-t overflow-hidden mb-px">{['日','一','二','三','四','五','六'].map(d=><div key={d} className="bg-gray-100 text-center text-xs text-gray-500 py-1 font-semibold">{d}</div>)}</div>
+    <div className="grid grid-cols-7 gap-px bg-gray-200 rounded-b overflow-hidden">{cells.map((cell,i)=><div key={i} className={`bg-white min-h-24 p-1 ${cell.hol&&!cell.fade?'bg-red-50':cell.wknd&&!cell.fade?'bg-gray-50':''} ${cell.fade?'opacity-40':''}`}><div className={`text-xs mb-1 w-6 h-6 flex items-center justify-center rounded-full ${cell.isT?'bg-indigo-600 text-white font-bold':cell.hol?'text-red-500':cell.wknd?'text-gray-400':'text-gray-600'}`}>{cell.d}</div>{!cell.fade&&cell.tasks.map(t=><div key={t.id} onClick={()=>onOpen(t)} className={`text-xs rounded px-1 py-0.5 mb-0.5 cursor-pointer truncate ${gc(t.statusId)} hover:brightness-95`}>{t.name}</div>)}{!cell.fade&&addCard&&<button onClick={()=>addCard(cell.ds)} className="text-gray-300 hover:text-indigo-500 text-xs w-full text-left px-1 mt-0.5">+</button>}</div>)}</div>
+  </div>;
+}
+
+/* ══ 修5：任務總覽 — 修正佈局不被壓縮 ══ */
+function TreeOverview({nodes,cards,statuses,members,tagC,admins,curUser,onOpen,updCard,setCurNid,setView}){
+  const[search,setSearch]=useState('');const[fSt,setFSt]=useState('全部');const[fAs,setFAs]=useState('全部');
+  const rootNodeIds=useMemo(()=>Object.values(nodes||{}).filter(n=>!n.parentId).map(n=>n.id),[nodes]);
+  const[expanded,setExpanded]=useState(()=>{const all={};Object.keys(nodes||{}).forEach(k=>{all[k]=true;});return all;});
+  const match=c=>{if(fSt!=='全部'&&c.statusId!==fSt)return false;if(fAs!=='全部'&&c.assignee!==fAs)return false;if(search&&c.name.toLowerCase().indexOf(search.toLowerCase())<0)return false;return true;};
+
+  // 修5：改用 table 佈局替代 grid，避免 grid 欄位被壓縮
+  function CardTableHeader({indent}){
+    return(
+      <div style={{display:'flex',paddingLeft:indent,paddingRight:16,paddingTop:6,paddingBottom:6,background:'#f8fafc',borderTop:'1px solid #e5e7eb',borderBottom:'1px solid #e5e7eb',gap:0}}>
+        <div style={{flex:'0 0 36%',fontSize:11,fontWeight:600,color:'#9ca3af'}}>任務名稱</div>
+        <div style={{flex:'0 0 14%',fontSize:11,fontWeight:600,color:'#9ca3af'}}>狀態</div>
+        <div style={{flex:'0 0 10%',fontSize:11,fontWeight:600,color:'#9ca3af'}}>緊急</div>
+        <div style={{flex:'0 0 14%',fontSize:11,fontWeight:600,color:'#9ca3af'}}>負責人</div>
+        <div style={{flex:'0 0 10%',fontSize:11,fontWeight:600,color:'#9ca3af'}}>截止</div>
+        <div style={{flex:'1',fontSize:11,fontWeight:600,color:'#9ca3af'}}>組別</div>
+      </div>
+    );
+  }
+  function CardMiniRow({c,indent,onOpen}){
+    const ov=isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成';
+    const stLabel=(statuses||[]).find(s=>s.id===c.statusId)?.label||'';
+    const stColor=(statuses||[]).find(s=>s.id===c.statusId)?.color||'';
+    const role=getRole(c,curUser,admins);const ri=role?ROLE_LABELS[role]:null;
+    return(
+      <div className="cursor-pointer hover:bg-indigo-50 transition-colors"
+        style={{display:'flex',paddingLeft:indent,paddingRight:16,paddingTop:9,paddingBottom:9,borderTop:'1px solid #f1f5f9',alignItems:'center',gap:0}}
+        onClick={()=>onOpen(c)}>
+        <div style={{flex:'0 0 36%',minWidth:0,display:'flex',alignItems:'center',gap:6,paddingRight:8}}>
+          <span style={{fontSize:12,flexShrink:0,color:'#d1d5db'}}>🎫</span>
+          <span style={{fontSize:13,fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',color:ov?'#dc2626':'#1f2937'}}>{c.name}</span>
+          {ov&&<span style={{color:'#f87171',fontSize:11,flexShrink:0}}>⚠</span>}
+          {ri&&<span className={`border rounded px-1 flex-shrink-0 ${ri.c}`} style={{fontSize:9}}>{ri.icon}</span>}
+        </div>
+        <div style={{flex:'0 0 14%',paddingRight:6}}>
+          {stLabel?<span className={`rounded px-2 py-0.5 text-xs font-medium whitespace-nowrap ${stColor}`}>{stLabel}</span>:<span style={{fontSize:12,color:'#d1d5db'}}>—</span>}
+        </div>
+        <div style={{flex:'0 0 10%',paddingRight:6}}>
+          {c.urgency&&c.urgency!=='普通'?<span className={`rounded px-1.5 py-0.5 text-xs font-medium whitespace-nowrap ${URG_C[c.urgency]||''}`}>{c.urgency}</span>:<span style={{fontSize:12,color:'#d1d5db'}}>—</span>}
+        </div>
+        <div style={{flex:'0 0 14%',paddingRight:6}}>
+          {c.assignee?<span className={`rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${mc(c.assignee,members||[])}`}>{c.assignee}</span>:<span style={{fontSize:12,color:'#d1d5db'}}>—</span>}
+        </div>
+        <div style={{flex:'0 0 10%',paddingRight:6}}>
+          <span style={{fontSize:13,whiteSpace:'nowrap',color:ov?'#ef4444':'#6b7280',fontWeight:ov?600:'normal'}}>{c.dueDate?fmt(c.dueDate):'—'}</span>
+        </div>
+        <div style={{flex:'1',display:'flex',flexWrap:'wrap',gap:3}}>
+          {(c.tags||[]).length>0
+            ?(c.tags||[]).map(t=><span key={t} className={`rounded px-1.5 py-0.5 text-xs ${(tagC||{})[t]||'bg-gray-100 text-gray-600'}`}>{t}</span>)
+            :<span style={{fontSize:12,color:'#d1d5db'}}>—</span>}
+        </div>
+      </div>
+    );
+  }
+  function renderInnerBlock(nid,depth,accentColor){
+    const n=(nodes||{})[nid];if(!n)return null;
+    const exp=expanded[nid]!==false;const hasK=(n.children||[]).length>0;
+    const here=nodeCards(nodes||{},cards||{},nid).filter(match);
+    const st2=nodeStats(nodes||{},cards||{},nid,statuses);const indent=(depth-1)*14;
+    return(
+      <div key={nid}>
+        <div className="flex items-center gap-2 cursor-pointer select-none group hover:bg-gray-50 transition-colors"
+          style={{paddingLeft:16+indent,paddingRight:14,paddingTop:5,paddingBottom:5,borderTop:'1px solid #f1f5f9',borderLeft:`3px solid ${accentColor}22`}}
+          onClick={()=>setExpanded(p=>({...p,[nid]:!exp}))}>
+          <span style={{color:'#9ca3af',width:10,fontSize:9,flexShrink:0}}>{(hasK||here.length>0)?(exp?'▾':'▸'):''}</span>
+          <span style={{fontSize:11,flexShrink:0}}>📂</span>
+          <span className={`flex-1 truncate font-semibold ${depth===1?'text-sm text-gray-700':'text-xs text-gray-600'}`}>{n.name}</span>
+          <div className="flex items-center gap-2 flex-shrink-0 opacity-60 group-hover:opacity-100">
+            {st2.total>0&&<span className="text-xs font-medium text-gray-500">{st2.total}</span>}
+            {st2.overdue>0&&<span className="text-red-400 text-xs">⚠{st2.overdue}</span>}
+            <button className="text-indigo-400 hover:text-indigo-600 text-xs border border-indigo-200 rounded px-1.5 py-0.5 hover:bg-indigo-50 opacity-0 group-hover:opacity-100" onClick={e=>{e.stopPropagation();setCurNid(nid);setView('board');}}>→</button>
+          </div>
+        </div>
+        {exp&&<>
+          {here.length>0&&<CardTableHeader indent={indent+28}/>}
+          {here.map(c=><CardMiniRow key={c.id} c={c} indent={indent+28} onOpen={onOpen}/>)}
+          {(n.children||[]).map(cid=>renderInnerBlock(cid,depth+1,accentColor))}
+        </>}
+      </div>
+    );
+  }
+  function renderRootBlock(nid,idx){
+    const n=(nodes||{})[nid];if(!n)return null;
+    const exp=expanded[nid]!==false;const st2=nodeStats(nodes||{},cards||{},nid,statuses);
+    const pct=st2.total>0?Math.round(st2.done/st2.total*100):0;
+    const hereRoot=nodeCards(nodes||{},cards||{},nid).filter(match);
+    const ACCENT_COLORS=['#6366f1','#ec4899','#10b981','#f59e0b','#8b5cf6','#06b6d4','#f43f5e'];
+    const accent=ACCENT_COLORS[idx%ACCENT_COLORS.length];
+    return(
+      <div key={nid} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-4">
+        <div className="flex items-center gap-3 cursor-pointer select-none hover:bg-gray-50/80 transition-colors px-5 py-4" style={{borderLeft:`5px solid ${accent}`}} onClick={()=>setExpanded(p=>({...p,[nid]:!exp}))}>
+          <span style={{color:'#9ca3af',fontSize:11,width:12,flexShrink:0}}>{exp?'▾':'▸'}</span>
+          <span style={{fontSize:20,flexShrink:0}}>📁</span>
+          <span className="text-xl font-extrabold text-gray-800 flex-1 truncate">{n.name}</span>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {st2.total>0&&<>
+              <span className="text-sm font-bold" style={{color:accent}}>{st2.total} 筆</span>
+              {st2.done>0&&<span className="text-xs text-green-600 font-semibold">✅ {st2.done}</span>}
+              {st2.overdue>0&&<span className="text-xs text-red-500 font-semibold">⚠ {st2.overdue}</span>}
+              <div className="flex items-center gap-1.5" style={{width:56}}><PBar pct={pct} h={5}/><span style={{fontSize:10,fontWeight:700,color:pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444',minWidth:28,textAlign:'right'}}>{pct}%</span></div>
+            </>}
+            <button className="text-xs border rounded px-2 py-1 font-medium hover:bg-indigo-50 transition-colors" style={{color:accent,borderColor:accent+'55',fontSize:11}} onClick={e=>{e.stopPropagation();setCurNid(nid);setView('board');}}>進入 →</button>
+          </div>
+        </div>
+        {exp&&<div style={{borderTop:'1px solid #f1f5f9'}}>
+          <CardTableHeader indent={20}/>
+          {hereRoot.map(c=><CardMiniRow key={c.id} c={c} indent={20} onOpen={onOpen}/>)}
+          {(n.children||[]).map(cid=>renderInnerBlock(cid,1,accent))}
+          {hereRoot.length===0&&(n.children||[]).length===0&&<div className="px-6 py-3 text-xs text-gray-300 italic">此節點尚無任務</div>}
+        </div>}
+      </div>
+    );
+  }
+  const allCards=useMemo(()=>Object.values(cards||{}).filter(c=>!c.archived),[cards]);
+  const stats={total:allCards.length,done:allCards.filter(c=>(statuses||[]).find(s=>s.id===c.statusId)?.label==='完成').length,overdue:allCards.filter(c=>isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成').length};
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100%',minHeight:0}}>
+      <div className="grid grid-cols-3 gap-3 mb-4 flex-shrink-0">{[{v:stats.total,l:'全部任務',c:'text-indigo-600',bg:'bg-indigo-50'},{v:stats.done,l:'已完成',c:'text-green-600',bg:'bg-green-50'},{v:stats.overdue,l:'逾期中',c:'text-red-500',bg:'bg-red-50'}].map(x=><div key={x.l} className={`rounded-xl shadow-sm p-4 text-center ${x.bg} border border-gray-100`}><div className={`text-3xl font-extrabold ${x.c}`}>{x.v}</div><div className="text-xs text-gray-500 mt-0.5 font-medium">{x.l}</div></div>)}</div>
+      <div className="flex items-center gap-2 mb-4 flex-wrap flex-shrink-0">
+        <input className="border rounded-lg px-3 py-1.5 text-xs w-44 bg-white" placeholder="🔍 搜尋任務..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        <select className="border rounded-lg px-2 py-1.5 text-xs bg-white" value={fAs} onChange={e=>setFAs(e.target.value)}><option value="全部">全部負責人</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select>
+        <select className="border rounded-lg px-2 py-1.5 text-xs bg-white" value={fSt} onChange={e=>setFSt(e.target.value)}><option value="全部">全部狀態</option>{(statuses||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select>
+        <button onClick={()=>{const all={};Object.keys(nodes||{}).forEach(k=>all[k]=true);setExpanded(all);}} className="border rounded-lg px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 bg-white">全展開</button>
+        <button onClick={()=>setExpanded({})} className="border rounded-lg px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100 bg-white">全收合</button>
+      </div>
+      <div style={{flex:1,overflowY:'auto',paddingRight:2,minHeight:0}}>
+        {rootNodeIds.length===0?<div className="bg-white rounded-xl shadow text-center text-gray-400 py-16">尚無任務節點</div>:rootNodeIds.map((nid,idx)=>renderRootBlock(nid,idx))}
+      </div>
+    </div>
+  );
+}
+
+function MyWorkspace({cards,nodes,statuses,tagC,members,admins,curUser,setSelCard}){
+  const[vw,setVw]=useState('list');const[fSt,setFSt]=useState('全部');const[collapsed,setCollapsed]=useState({});
+  const gc=id=>((statuses||[]).find(s=>s.id===id)||(statuses||[])[0]||{color:''}).color;
+  const groups=useMemo(()=>{
+    const g={owner:[],tracker:[],collaborator:[]};
+    Object.values(cards||{}).forEach(c=>{
+      if(c.archived)return;
+      if(fSt!=='全部'&&c.statusId!==fSt)return;
+      const roles=getRoles(c,curUser,admins);
+      if(c.assignee===curUser)g.owner.push(c);
+      else if(c.follower===curUser)g.tracker.push(c);
+      else if((c.collaborators||[]).includes(curUser))g.collaborator.push(c);
+    });
+    return g;
+  },[cards,curUser,admins,fSt]);
+  const total=groups.owner.length+groups.tracker.length+groups.collaborator.length;
+  const allMine=[...groups.owner,...groups.tracker,...groups.collaborator];
+  const done=allMine.filter(c=>(statuses||[]).find(s=>s.id===c.statusId)?.label==='完成').length;
+  const overdue=allMine.filter(c=>isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成').length;
+  const GROUP_CFG=[{key:'owner',icon:'👤',label:'負責人',desc:'我是負責人的任務',ri:ROLE_LABELS.owner},{key:'tracker',icon:'👁',label:'追蹤者',desc:'我追蹤中的任務',ri:ROLE_LABELS.tracker},{key:'collaborator',icon:'🔧',label:'協作者',desc:'我是協作者的任務',ri:ROLE_LABELS.collaborator}];
+  const BORDER={owner:'border-l-indigo-500',tracker:'border-l-amber-500',collaborator:'border-l-emerald-500'};
+  const BORDER2={owner:'border-indigo-300',tracker:'border-amber-300',collaborator:'border-emerald-300'};
+  const toggleCol=key=>setCollapsed(p=>({...p,[key]:!p[key]}));
+  const ListGroup=({gCards})=>{if(!gCards.length)return<tr><td colSpan={7} className="px-5 py-4 text-sm text-gray-400 italic">無任務</td></tr>;return gCards.map(c=>{const ov=isOD(c.dueDate)&&(statuses||[]).find(s=>s.id===c.statusId)?.label!=='完成';const path=nodePath(nodes||{},c.nodeId);return<tr key={c.id} className={`border-t cursor-pointer ${ov?'bg-red-50/40 hover:bg-red-50':'hover:bg-indigo-50'}`} onClick={()=>setSelCard(c)}><td className="p-3"><div className="font-medium flex items-center gap-1 flex-wrap">{c.name}{ov&&<span className="text-red-500 text-xs">⚠</span>}</div>{path&&<div className="text-xs text-gray-400 truncate max-w-xs">{path}</div>}</td><td className="p-3 text-center whitespace-nowrap"><span className={`rounded px-2 py-0.5 text-xs ${gc(c.statusId)}`}>{(statuses||[]).find(s=>s.id===c.statusId)?.label||'—'}</span></td><td className="p-3 text-center"><UBadge u={c.urgency}/></td><td className="p-3 text-center text-sm">{c.assignee||'—'}</td><td className="p-3 text-center text-sm text-gray-500">{c.startDate?fmt(c.startDate):'—'}</td><td className={`p-3 text-center text-sm ${ov?'text-red-500 font-medium':''}`}>{c.dueDate?fmt(c.dueDate):'—'}</td><td className="p-3"><div className="flex flex-wrap gap-1">{(c.tags||[]).map(t=><span key={t} className={`rounded px-1.5 py-0.5 text-xs ${(tagC||{})[t]||'bg-gray-100 text-gray-600'}`}>{t}</span>)}</div></td></tr>;});};
+  return<div>
+    <div className="flex items-center gap-3 mb-5 flex-wrap"><h2 className="font-bold text-xl">👤 個人工作區 — <span className={`rounded-full px-2 py-0.5 text-base ${mc(curUser,members||[])}`}>{curUser}</span></h2><div className="flex gap-1">{[{id:'list',l:'📄 列表'},{id:'board',l:'📋 看板'}].map(t=><button key={t.id} onClick={()=>setVw(t.id)} className={`px-4 py-1.5 rounded text-sm font-medium ${vw===t.id?'bg-indigo-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>{t.l}</button>)}</div><select className="border rounded-lg px-3 py-1.5 text-sm" value={fSt} onChange={e=>setFSt(e.target.value)}><option value="全部">全部狀態</option>{(statuses||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select></div>
+    <div className="grid grid-cols-3 gap-4 mb-6">{[{v:total,l:'我的任務',c:'text-indigo-600',bg:'bg-indigo-50'},{v:done,l:'已完成',c:'text-green-600',bg:'bg-green-50'},{v:overdue,l:'逾期中',c:'text-red-500',bg:'bg-red-50'}].map(x=><div key={x.l} className={`rounded-xl shadow p-5 text-center ${x.bg}`}><div className={`text-4xl font-extrabold ${x.c}`}>{x.v}</div><div className="text-sm text-gray-500 mt-1 font-medium">{x.l}</div></div>)}</div>
+    {vw==='list'&&<div className="space-y-4">{GROUP_CFG.map(({key,icon,label,desc,ri})=>{const col=collapsed[key];const gCards=groups[key];return<div key={key} className={`bg-white rounded-xl shadow overflow-hidden border-l-4 ${BORDER[key]}`}><div className="flex items-center gap-3 px-5 py-3 border-b cursor-pointer select-none" onClick={()=>toggleCol(key)}><span className={`inline-flex items-center gap-1 border rounded-full px-3 py-1 text-sm font-semibold ${ri.c}`}>{icon} {label}</span><span className="text-sm text-gray-500">{desc}</span><span className={`ml-1 text-xs rounded-full px-2 py-0.5 font-bold ${ri.c}`}>{gCards.length}</span><span className="ml-auto text-gray-400 text-sm">{col?'▶':'▼'}</span></div>{!col&&<table className="w-full text-sm border-collapse"><thead className="bg-gray-50 text-gray-500"><tr><th className="p-3 text-left border-b">名稱 / 路徑</th><th className="p-3 border-b w-24">狀態</th><th className="p-3 border-b w-16">緊急</th><th className="p-3 border-b w-20">負責人</th><th className="p-3 border-b w-16">開始</th><th className="p-3 border-b w-16">截止</th><th className="p-3 border-b">組別</th></tr></thead><tbody><ListGroup gCards={gCards}/></tbody></table>}</div>;})}</div>}
+    {vw==='board'&&<div className="space-y-6">{GROUP_CFG.map(({key,icon,label,desc,ri})=>{const col=collapsed[key];const gCards=groups[key];return<div key={key}><div className={`flex items-center gap-3 mb-3 pb-2 border-b-2 cursor-pointer ${BORDER2[key]}`} onClick={()=>toggleCol(key)}><span className={`inline-flex items-center gap-1 border rounded-full px-3 py-1 text-sm font-semibold ${ri.c}`}>{icon} {label}</span><span className="text-sm text-gray-500">{desc}</span><span className={`text-xs rounded-full px-2 py-0.5 font-bold ${ri.c}`}>{gCards.length}</span><span className="ml-auto text-gray-400 text-sm">{col?'▶':'▼'}</span></div>{!col&&<div className="flex gap-3 overflow-x-auto pb-2">{(statuses||[]).map(st=>{const colC=gCards.filter(c=>c.statusId===st.id);return<div key={st.id} className="flex-shrink-0 w-56"><div className={`flex items-center justify-between px-2 py-1 rounded-t text-xs font-semibold mb-1.5 ${st.color}`}><span>{st.label}</span><span className="bg-white bg-opacity-60 rounded-full px-1.5">{colC.length}</span></div><div className="space-y-1.5">{colC.map(c=>{const ov=isOD(c.dueDate)&&st.label!=='完成';const path=nodePath(nodes||{},c.nodeId);return<div key={c.id} className={`bg-white rounded shadow-sm p-2 cursor-pointer hover:shadow-md text-xs ${ov?'border border-red-200':''}`} onClick={()=>setSelCard(c)}><div className="font-medium flex items-center gap-1 flex-wrap mb-0.5">{c.name}{ov&&<span className="text-red-500">⚠</span>}<UBadge u={c.urgency}/></div>{path&&<div className="text-gray-400 truncate mb-0.5">{path}</div>}<div className="flex gap-2 text-gray-500 flex-wrap">{c.assignee&&<span>👤{c.assignee}</span>}{c.dueDate&&<span className={ov?'text-red-500 font-medium':''}>{fmt(c.dueDate)}</span>}</div></div>;})}</div></div>;})}</div>}</div>;})}</div>}
+  </div>;
+}
+
+function WeeklyView({weekly,setWeekly,members}){
+  const[nwd,setNwd]=useState('');const[selM,setSelM]=useState([]);const[showLeg,setShowLeg]=useState(false);const[showAW,setShowAW]=useState(false);
+  const[ec,setEc]=useState(null);const[ev,setEv]=useState('');
+  const[itemDrag,setItemDrag]=useState(null);const[itemOver,setItemOver]=useState(null);
+  const[memberDrag,setMemberDrag]=useState(null);
+  const[memberOver,setMemberOver]=useState(null);
+  const upd=fn=>setWeekly(p=>{const base=p&&Array.isArray(p.weeks)?p:DEF_WEEKLY;const w=clone(base);fn(w);return w;});
+  const safe=m=>{if(!m)return{name:'',promises:[],dailyItems:[[],[],[],[],[]]};let di=Array.isArray(m.dailyItems)?m.dailyItems.slice(0,5).map(d=>Array.isArray(d)?[...d]:[]):[];while(di.length<5)di.push([]);return{...m,promises:Array.isArray(m.promises)?m.promises:[],dailyItems:di};};
+  const sw=useMemo(()=>[...((weekly||DEF_WEEKLY).weeks||[])].map((w,i)=>({...w,_i:i})).reverse(),[(weekly||DEF_WEEKLY).weeks]);
+  const doAdd=()=>{if(!nwd.trim())return;const wm=selM.length>0?selM.map(n=>({name:n,promises:[],dailyItems:[[],[],[],[],[]]})):((weekly||DEF_WEEKLY).weeks.slice(-1)[0]?.members||[]).map(m=>({name:m.name,promises:[],dailyItems:[[],[],[],[],[]]}));setWeekly(p=>({weeks:[...(p||DEF_WEEKLY).weeks,{id:uid(),weekLabel:nwd,collapsed:false,members:wm}]}));setNwd('');setSelM([]);setShowAW(false);};
+  const onIDStart=(wi,mi,di,idx,e)=>{e.stopPropagation();setItemDrag({wi,mi,di,idx});e.dataTransfer.effectAllowed='move';};
+  const onIDOver=(wi,mi,di,idx,e)=>{e.preventDefault();e.stopPropagation();setItemOver({wi,mi,di,idx});};
+  const onIDrop=(wi,mi,di,idx,e)=>{e.preventDefault();e.stopPropagation();if(!itemDrag||itemDrag.wi!==wi||itemDrag.mi!==mi||itemDrag.di!==di||itemDrag.idx===idx){setItemDrag(null);setItemOver(null);return;}upd(w=>{const col=[...w.weeks[wi].members[mi].dailyItems[di]];const[moved]=col.splice(itemDrag.idx,1);col.splice(idx,0,moved);w.weeks[wi].members[mi].dailyItems[di]=col;});setItemDrag(null);setItemOver(null);};
+  const onMemberDragStart=(wi,mi,e)=>{e.stopPropagation();setMemberDrag({wi,mi});e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('memberDrag','1');};
+  const onMemberDragOver=(wi,mi,e)=>{e.preventDefault();e.stopPropagation();if(memberDrag&&memberDrag.wi===wi&&memberDrag.mi!==mi)setMemberOver({wi,mi});};
+  const onMemberDrop=(wi,mi,e)=>{e.preventDefault();e.stopPropagation();if(!memberDrag||memberDrag.wi!==wi||memberDrag.mi===mi){setMemberDrag(null);setMemberOver(null);return;}const fromMi=memberDrag.mi;upd(w=>{const mbs=[...w.weeks[wi].members];const[moved]=mbs.splice(fromMi,1);mbs.splice(mi,0,moved);w.weeks[wi].members=mbs;});setMemberDrag(null);setMemberOver(null);};
+  const onMemberDragEnd=()=>{setMemberDrag(null);setMemberOver(null);};
+  return<div>
+    <div className="flex items-center gap-3 mb-3 flex-wrap"><h2 className="font-bold text-lg">🎮 遊戲組每週進度</h2><button onClick={()=>setShowLeg(v=>!v)} className="text-xs border rounded px-2 py-0.5 text-gray-500 hover:bg-gray-100">{showLeg?'隱藏說明':'📋 類型說明'}</button><div className="ml-auto"><button onClick={()=>setShowAW(v=>!v)} className={`text-xs border rounded px-3 py-1 ${showAW?'bg-green-600 text-white':'text-green-700 border-green-400 hover:bg-green-50'}`}>＋ 新增週次</button></div></div>
+    {showAW&&<div className="bg-white rounded shadow p-3 mb-4 border border-green-200"><div className="flex flex-wrap gap-1 mb-2">{(members||[]).map(n=><button key={n} onClick={()=>setSelM(p=>p.includes(n)?p.filter(x=>x!==n):[...p,n])} className={`text-xs rounded px-2 py-0.5 border ${selM.includes(n)?'bg-indigo-600 text-white':'border-gray-300 text-gray-600'}`}>{n}</button>)}</div><div className="flex gap-2"><input type="date" className="border rounded px-2 py-1 text-xs" value={nwd} onChange={e=>setNwd(e.target.value)}/><button onClick={doAdd} className="bg-green-600 text-white px-3 rounded text-xs">確認新增</button><button onClick={()=>setShowAW(false)} className="border rounded px-3 text-xs text-gray-500">取消</button></div></div>}
+    {showLeg&&<div className="mb-4 bg-white rounded shadow p-3 flex flex-wrap gap-2">{TASK_TYPES.map(t=><span key={t.lb} className={`rounded px-2 py-0.5 text-xs font-medium ${t.c}`}>{t.lb}</span>)}</div>}
+    {sw.map(week=>{
+      const wi=week._i;const wdays=week.weekLabel?getWorkdays(week.weekLabel,5):[];
+      return<div key={week.id} className="mb-6 bg-white rounded shadow overflow-hidden">
+        <div className="flex items-center gap-2 px-4 py-2 bg-indigo-700 text-white cursor-pointer" onClick={()=>upd(w=>{w.weeks[wi].collapsed=!w.weeks[wi].collapsed})}><span>{week.collapsed?'▶':'▼'}</span><span className="font-bold text-sm flex-1">📅 {week.weekLabel}{wdays.length>0&&!week.collapsed&&<span className="font-normal text-indigo-200 ml-2 text-xs">({fmt(wdays[0])} ~ {fmt(wdays[4])})</span>}</span><button className="text-indigo-200 hover:text-red-300 text-xs px-2 py-0.5 rounded border border-indigo-500" onClick={e=>{e.stopPropagation();if(window.confirm('確定刪除此週次？'))upd(w=>{w.weeks.splice(wi,1)})}}>🗑</button></div>
+        {!week.collapsed&&<div className="p-3 overflow-x-auto"><table className="border-collapse text-xs w-full">
+          <thead><tr className="bg-gray-100"><th className="border p-2 text-left text-gray-600 w-28">人員</th><th className="border p-2 text-center text-indigo-700 bg-indigo-50 min-w-48">📌 本週承諾</th>{wdays.map((wd,di)=>{const hol=isHol(wd);return<th key={di} className={`border p-2 text-center min-w-44 ${hol?'bg-red-100':''}`}><div className={`font-bold flex items-center justify-center gap-1 ${hol?'text-red-600':'text-indigo-700'}`}>{dName(wd)}{hol&&<span className="bg-red-400 text-white rounded px-1 text-xs font-normal">假日</span>}</div><div className={`font-normal ${hol?'text-red-400':'text-gray-400'}`}>{fmt(wd)}</div></th>;})}
+          </tr></thead>
+          <tbody>{week.members.map((rawM,mi)=>{
+            const m=safe(rawM);const promises=m.promises||[];const dailyItems=m.dailyItems;
+            const mr=Math.max(0,...dailyItems.map(d=>d.length));const mp=promises.length;const tr=Math.max(1,mr,mp);
+            const isMD=memberDrag&&memberDrag.wi===wi&&memberDrag.mi===mi;
+            const isMO=memberOver&&memberOver.wi===wi&&memberOver.mi===mi&&!(memberDrag&&memberDrag.mi===mi);
+            return<React.Fragment key={mi}>
+              {Array.from({length:tr},(_,ii)=>{
+                const pr=promises[ii]||null;const sc=pr?(PROMISE_C[pr.status]||'bg-gray-100 text-gray-400'):'';const pck=`p-${wi}-${mi}-${ii}`;
+                return<tr key={ii} className={`${ii===0?'border-t-2 border-indigo-100':''} hover:bg-gray-50 ${isMD&&ii===0?'member-row-dragging':''} ${isMO&&ii===0?'member-row-dragover':''}`}>
+                  {ii===0&&<td className="border p-2 font-bold text-indigo-800 bg-indigo-50 align-top" rowSpan={tr+1} draggable onDragStart={e=>onMemberDragStart(wi,mi,e)} onDragOver={e=>onMemberDragOver(wi,mi,e)} onDrop={e=>onMemberDrop(wi,mi,e)} onDragEnd={onMemberDragEnd}>
+                    <div className="flex flex-col gap-1 items-start">
+                      <div className="flex items-center gap-1.5"><span className="text-gray-300 cursor-grab text-sm select-none" title="拖曳排序">⠿</span><span>{m.name}</span></div>
+                      <button className="text-gray-300 hover:text-red-400 text-xs font-normal" onClick={()=>upd(w=>{w.weeks[wi].members.splice(mi,1)})}>✕ 移除</button>
+                    </div>
+                  </td>}
+                  <td className="border p-1 bg-indigo-50 align-top min-w-48">{pr&&<div className="flex items-center gap-1"><select className={`rounded px-1 py-0.5 text-xs border-0 cursor-pointer font-medium flex-shrink-0 ${sc}`} value={pr.status} onChange={e=>upd(w=>{w.weeks[wi].members[mi].promises[ii].status=e.target.value})}><option value=''>狀態</option>{PROMISE_ST.map(s=><option key={s.lb} value={s.lb}>{s.lb}</option>)}</select>{ec===pck?<input className="flex-1 border-b border-indigo-400 text-xs outline-none" value={ev} autoFocus onChange={e=>setEv(e.target.value)} onBlur={()=>{upd(w=>{w.weeks[wi].members[mi].promises[ii].text=ev});setEc(null)}} onKeyDown={e=>{if(e.key==='Enter'){upd(w=>{w.weeks[wi].members[mi].promises[ii].text=ev});setEc(null)}}}/>:<div className={`flex-1 cursor-pointer min-h-4 text-xs ${pr.status==='已完成'?'line-through text-gray-400':'text-gray-700'}`} onClick={()=>{setEc(pck);setEv(pr.text)}}>{pr.text||<span className="text-gray-300">點擊輸入</span>}</div>}<button className="text-gray-300 hover:text-red-400 flex-shrink-0" onClick={()=>upd(w=>{w.weeks[wi].members[mi].promises.splice(ii,1)})}>✕</button></div>}</td>
+                  {dailyItems.map((col,di)=>{const item=col[ii]||null;const hol=isHol(wdays[di]);const dck=`d-${wi}-${mi}-${di}-${ii}`;const idth=itemDrag&&itemDrag.wi===wi&&itemDrag.mi===mi&&itemDrag.di===di&&itemDrag.idx===ii;const idov=itemOver&&itemOver.wi===wi&&itemOver.mi===mi&&itemOver.di===di&&itemOver.idx===ii;
+                    return<td key={di} className={`border p-1 min-w-44 ${hol?'bg-red-50':''}`}>{item&&<div className={`flex items-center gap-1 rounded ${idth?'opacity-40':''} ${idov?'ring-2 ring-indigo-400':''}`} draggable onDragStart={e=>onIDStart(wi,mi,di,ii,e)} onDragOver={e=>onIDOver(wi,mi,di,ii,e)} onDrop={e=>onIDrop(wi,mi,di,ii,e)} onDragEnd={()=>{setItemDrag(null);setItemOver(null);}}>
+                      <span className="text-gray-300 cursor-grab text-xs flex-shrink-0">⠿</span>
+                      <select className={`rounded px-1 py-0.5 text-xs border-0 cursor-pointer font-medium flex-shrink-0 ${TYPE_C[item.type]||'bg-gray-100 text-gray-500'}`} value={item.type} onChange={e=>upd(w=>{w.weeks[wi].members[mi].dailyItems[di][ii].type=e.target.value})}><option value=''>類型</option>{TASK_TYPES.map(t=><option key={t.lb} value={t.lb}>{t.lb}</option>)}</select>
+                      {ec===dck?<input className="flex-1 border-b border-indigo-400 text-xs outline-none" value={ev} autoFocus onChange={e=>setEv(e.target.value)} onBlur={()=>{upd(w=>{w.weeks[wi].members[mi].dailyItems[di][ii].text=ev});setEc(null)}} onKeyDown={e=>{if(e.key==='Enter'){upd(w=>{w.weeks[wi].members[mi].dailyItems[di][ii].text=ev});setEc(null)}}}/>:<div className="flex-1 cursor-pointer min-h-4 text-gray-700 truncate" onClick={()=>{setEc(dck);setEv(item.text||'')}}>{item.text||<span className="text-gray-300">點擊輸入</span>}</div>}
+                      <button className="text-gray-300 hover:text-red-400 flex-shrink-0" onClick={()=>upd(w=>{w.weeks[wi].members[mi].dailyItems[di].splice(ii,1)})}>✕</button>
+                    </div>}</td>;})}
+                </tr>;
+              })}
+              <tr className={`bg-gray-50 ${isMD?'member-row-dragging':''}`}><td className="border p-1 text-center"><button className="text-indigo-400 text-xs hover:underline" onClick={()=>upd(w=>{const mm=w.weeks[wi].members[mi];if(!Array.isArray(mm.promises))mm.promises=[];mm.promises.push({text:'',status:''})})}>+ 承諾</button></td>{dailyItems.map((_,di)=><td key={di} className={`border p-1 ${isHol(wdays[di])?'bg-red-50':''}`}><button className="text-indigo-500 text-xs hover:underline" onClick={()=>upd(w=>{const mm=w.weeks[wi].members[mi];if(!Array.isArray(mm.dailyItems))mm.dailyItems=[[],[],[],[],[]];if(!Array.isArray(mm.dailyItems[di]))mm.dailyItems[di]=[];mm.dailyItems[di].push({text:'',type:'',id:uid()})})}>+ 新增</button></td>)}</tr>
+            </React.Fragment>;
+          })}</tbody>
+        </table>
+        {(members||[]).filter(n=>!week.members.find(wm=>wm.name===n)).length>0&&<div className="flex gap-2 mt-3 flex-wrap items-center bg-gray-50 border rounded p-2"><span className="text-xs text-gray-400">加入成員：</span>{(members||[]).filter(n=>!week.members.find(wm=>wm.name===n)).map(n=><button key={n} onClick={()=>upd(w=>{w.weeks[wi].members.push({name:n,promises:[],dailyItems:[[],[],[],[],[]]});})} className="text-xs border border-dashed border-gray-300 rounded px-2 py-0.5 text-gray-500 hover:border-indigo-400 hover:text-indigo-600">+ {n}</button>)}</div>}
+        </div>}
+      </div>;
+    })}
+  </div>;
+}
+
+function QualityView({quality,setQuality,members}){
+  const[showAdd,setShowAdd]=useState(false);const[ni,setNi]=useState({name:'',assignee:'',startDate:'',url:''});const[editId,setEditId]=useState(null);const[editItem,setEditItem]=useState(null);const[showDisp,setShowDisp]=useState(true);const[showTable,setShowTable]=useState(true);
+  const add=()=>{if(!ni.name.trim())return;setQuality(p=>[...(p||[]),{...ni,id:uid(),total:50,pending:0,disputed:0,revisions:[]}]);setNi({name:'',assignee:'',startDate:'',url:''});setShowAdd(false);};
+  const del=id=>setQuality(p=>(p||[]).filter(q=>q.id!==id));
+  const saveEdit=()=>{setQuality(p=>(p||[]).map(q=>q.id===editId?{...editItem,total:Number(editItem.total)||0,pending:Number(editItem.pending)||0,disputed:Number(editItem.disputed)||0}:q));setEditId(null);setEditItem(null);};
+  const addRev=id=>setQuality(p=>(p||[]).map(q=>q.id!==id?q:{...q,revisions:[...(q.revisions||[]),{id:uid(),label:`${(q.revisions||[]).length+1}修`,pending:0,disputed:0,date:''}]}));
+  const updRev=(iid,rid,patch)=>setQuality(p=>(p||[]).map(q=>q.id!==iid?q:{...q,revisions:(q.revisions||[]).map(r=>r.id===rid?{...r,...patch}:r)}));
+  const delRev=(iid,rid)=>setQuality(p=>(p||[]).map(q=>q.id!==iid?q:{...q,revisions:(q.revisions||[]).filter(r=>r.id!==rid).map((r,i)=>({...r,label:`${i+1}修`}))}));
+  const updInit=(id,patch)=>setQuality(p=>(p||[]).map(q=>q.id!==id?q:{...q,...patch}));
+  const cY=(t,p,d,inc)=>{if(!t||t<=0)return null;return Math.round(((t-(inc?(p+d):p))/t)*100);};
+  const yC=p=>p===null?'':(p>=80?'text-green-600':p>=60?'text-yellow-500':'text-red-500');
+  const yB=p=>p===null?'border-gray-200':(p>=80?'border-green-300':p>=60?'border-yellow-300':'border-red-300');
+  const yBg=p=>p===null?'bg-gray-50':(p>=80?'bg-green-50':p>=60?'bg-yellow-50':'bg-red-50');
+  function YCell({pct}){if(pct===null)return<span className="text-gray-300">—</span>;return<span className={`text-2xl font-extrabold ${yC(pct)}`}>{pct}<span className="text-base">%</span></span>;}
+  function YBox({label,lc,total,pending,disputed,onPend,onDisp,date,onDate,onDelete}){const nd=cY(total,pending,disputed,false);const wd=cY(total,pending,disputed,true);return<div className={`rounded-xl border-2 p-3 min-w-44 relative group flex flex-col gap-1.5 ${yB(nd)} ${yBg(nd)}`}>{onDelete&&<button onClick={onDelete} className="absolute top-1 right-1 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 text-xs">✕</button>}<div className={`text-xs font-semibold ${lc||'text-gray-600'}`}>{label}</div><div className="flex items-baseline gap-1"><span className={`text-4xl font-extrabold leading-none ${yC(nd)}`}>{nd!==null?<>{nd}<span className="text-xl">%</span></>:<span className="text-2xl text-gray-300">—</span>}</span><span className="text-xs text-gray-400">無存疑</span></div>{showDisp&&(disputed||0)>0&&wd!==null&&<div className="flex items-baseline gap-1 border-t border-dashed border-amber-200 pt-1"><span className={`text-2xl font-bold leading-none ${yC(wd)} opacity-75`}>{wd}%</span><span className="text-xs text-amber-500">含存疑</span></div>}<div className="flex flex-col gap-1 border-t border-gray-200 pt-1.5"><div className="flex items-center gap-1 text-xs text-gray-500"><span className="w-8">待修</span>{onPend?<NumInput className="border rounded w-12 px-1 text-xs text-center bg-white" value={pending||0} onChange={onPend}/>:<span className="font-semibold">{pending||0}</span>}<span className="text-gray-400">/ {total}</span></div><div className="flex items-center gap-1 text-xs text-amber-600"><span className="w-8">存疑</span>{onDisp?<NumInput className="border rounded w-12 px-1 text-xs text-center bg-white" value={disputed||0} onChange={onDisp}/>:<span className="font-semibold">{disputed||0}</span>}<span className="text-gray-400">/ {total}</span></div>{onDate&&<input type="date" className="border rounded px-1 py-0.5 text-xs w-full" value={date||''} onChange={e=>onDate(e.target.value)}/>}</div></div>;}
+  return<div className="p-4 max-w-6xl">
+    <div className="flex items-center justify-between mb-4 gap-2 flex-wrap"><h2 className="font-bold text-lg">🔬 良率檢測</h2><div className="flex gap-2 flex-wrap"><button onClick={()=>setShowDisp(v=>!v)} className={`px-3 py-1 rounded text-xs border ${showDisp?'bg-amber-500 text-white':'border-gray-300 text-gray-600'}`}>{showDisp?'顯示存疑':'隱藏存疑'}</button><button onClick={()=>setShowTable(v=>!v)} className={`px-3 py-1 rounded text-xs border ${showTable?'bg-gray-800 text-white':'border-gray-300 text-gray-600'}`}>📊 良率總覽</button><button onClick={()=>setShowAdd(v=>!v)} className="bg-indigo-600 text-white px-3 py-1 rounded text-xs">+ 新增</button></div></div>
+    {showAdd&&<div className="bg-white rounded shadow p-4 mb-4 space-y-3"><div className="flex gap-2"><input className="flex-1 border rounded px-2 py-1 text-sm" placeholder="場域名稱 *" value={ni.name} onChange={e=>setNi(p=>({...p,name:e.target.value}))} autoFocus/><input className="flex-1 border rounded px-2 py-1 text-sm" placeholder="附件連結" value={ni.url} onChange={e=>setNi(p=>({...p,url:e.target.value}))}/></div><div className="flex gap-2"><select className="flex-1 border rounded px-2 py-1 text-sm" value={ni.assignee} onChange={e=>setNi(p=>({...p,assignee:e.target.value}))}><option value=''>-- 負責人 --</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select><input type="date" className="flex-1 border rounded px-2 py-1 text-sm" value={ni.startDate} onChange={e=>setNi(p=>({...p,startDate:e.target.value}))}/></div><div className="flex gap-2"><button onClick={add} className="flex-1 bg-indigo-600 text-white py-1 rounded text-sm">新增</button><button onClick={()=>setShowAdd(false)} className="flex-1 border py-1 rounded text-sm">取消</button></div></div>}
+    {showTable&&<div className="bg-white rounded shadow mb-4 overflow-x-auto">{!(quality||[]).length?<div className="text-center text-gray-400 py-8 text-xs">尚無項目</div>:<table className="w-full text-xs border-collapse"><thead className="bg-gray-50 text-gray-500 text-center"><tr><th className="p-2 text-left border-b">場域</th><th className="p-2 border-b">負責人</th><th className="p-2 border-b">關卡數</th><th className="p-2 border-b bg-amber-50">初版</th>{Array.from({length:Math.max(0,...(quality||[]).map(q=>(q.revisions||[]).length))},(_,i)=><th key={i} className="p-2 border-b bg-emerald-50">{i+1}修</th>)}<th className="p-2 border-b bg-indigo-50">最終</th></tr></thead><tbody>{(quality||[]).map(item=>{const iNd=cY(item.total,item.pending,item.disputed||0,false);const rNds=(item.revisions||[]).map(r=>cY(item.total,r.pending,r.disputed||0,false));const fp=rNds.length>0?rNds[rNds.length-1]:iNd;return<tr key={item.id} className="hover:bg-gray-50 text-center"><td className="p-3 text-left font-semibold border-b">{item.url?<a href={item.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{item.name}</a>:item.name}</td><td className="p-3 text-gray-500 border-b">{item.assignee||'—'}</td><td className="p-3 border-b font-bold">{item.total}</td><td className="p-2 border-b bg-amber-50"><YCell pct={iNd}/></td>{rNds.map((p,i)=><td key={i} className="p-2 border-b bg-emerald-50"><YCell pct={p}/></td>)}<td className="p-3 border-b bg-indigo-50"><YCell pct={fp}/></td></tr>;})}</tbody></table>}</div>}
+    <div className="space-y-3">{(quality||[]).map(item=><div key={item.id} className="bg-white rounded shadow p-4"><div className="flex items-start justify-between gap-2 mb-3"><div><div className="font-bold text-base">{item.name}{item.url&&<a href={item.url} target="_blank" rel="noopener noreferrer" className="ml-2 text-indigo-600 text-xs border border-indigo-300 rounded px-1.5 py-0.5">清單</a>}</div><div className="flex gap-3 text-xs text-gray-400 mt-0.5">{item.assignee&&<span>👤 {item.assignee}</span>}{item.startDate&&<span>📅 {item.startDate}</span>}<span>關卡數 <b className="text-gray-600">{item.total}</b></span></div></div><div className="flex gap-1"><button onClick={()=>{setEditId(item.id);setEditItem(clone(item));}} className="text-xs border rounded px-2 py-0.5 text-indigo-500 hover:bg-indigo-50">✎</button><button onClick={()=>del(item.id)} className="text-xs border rounded px-2 py-0.5 text-red-400 hover:bg-red-50">🗑</button></div></div><div className="flex flex-wrap gap-3 mb-3"><YBox label="初版" lc="text-amber-600" total={item.total} pending={item.pending||0} disputed={item.disputed||0} onPend={v=>updInit(item.id,{pending:v})} onDisp={v=>updInit(item.id,{disputed:v})}/>{(item.revisions||[]).map(rev=><YBox key={rev.id} label={rev.label} lc="text-indigo-600" total={item.total} pending={rev.pending||0} disputed={rev.disputed||0} onPend={v=>updRev(item.id,rev.id,{pending:v})} onDisp={v=>updRev(item.id,rev.id,{disputed:v})} date={rev.date} onDate={v=>updRev(item.id,rev.id,{date:v})} onDelete={()=>delRev(item.id,rev.id)}/>)}<button onClick={()=>addRev(item.id)} className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-indigo-300 p-4 min-w-36 text-indigo-400 hover:bg-indigo-50 text-xs gap-1"><span className="text-2xl">+</span><span>{(item.revisions||[]).length+1}修</span></button></div></div>)}</div>
+    {editId&&editItem&&<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4" onClick={()=>{setEditId(null);setEditItem(null);}}><div className="bg-white rounded-xl shadow-2xl w-full max-w-lg p-5" onClick={e=>e.stopPropagation()}><div className="flex items-center justify-between mb-4"><h3 className="font-bold text-base">✎ 編輯</h3><button onClick={()=>{setEditId(null);setEditItem(null);}} className="text-gray-400 text-xl">✕</button></div><div className="space-y-3"><div className="flex gap-2"><input className="flex-1 border rounded px-2 py-1 text-sm" placeholder="場域名稱 *" value={editItem.name} onChange={e=>setEditItem(p=>({...p,name:e.target.value}))}/><input className="flex-1 border rounded px-2 py-1 text-sm" placeholder="URL" value={editItem.url||''} onChange={e=>setEditItem(p=>({...p,url:e.target.value}))}/></div><select className="w-full border rounded px-2 py-1 text-sm" value={editItem.assignee||''} onChange={e=>setEditItem(p=>({...p,assignee:e.target.value}))}><option value=''>-- 負責人 --</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select><div className="flex gap-2"><input type="date" className="flex-1 border rounded px-2 py-1 text-sm" value={editItem.startDate||''} onChange={e=>setEditItem(p=>({...p,startDate:e.target.value}))}/><select className="border rounded px-2 py-1 text-sm" value={editItem.total||50} onChange={e=>setEditItem(p=>({...p,total:Number(e.target.value)}))}>{[50,100].map(n=><option key={n} value={n}>{n}關</option>)}</select></div><div className="flex gap-2"><button onClick={saveEdit} className="flex-1 bg-indigo-600 text-white py-1.5 rounded text-sm">儲存</button><button onClick={()=>{setEditId(null);setEditItem(null);}} className="flex-1 border py-1.5 rounded text-sm">取消</button></div></div></div></div>}
+  </div>;
+}
+
+function SettingsModal({onClose,members,setMembers,statuses,setStatuses,tags,tagC,setTags,setTagC,admins,setAdmins,rolePerms,setRolePerms}){
+  const[tab,setTab]=useState('members');const[ni,setNi]=useState('');const[nl,setNl]=useState('');const[nc,setNc]=useState(ST_COLS[0].c);const[tnl,setTnl]=useState('');const[tnc,setTnc]=useState(TAGC_OPTS[0].c);
+  const perms=rolePerms||DEF_ROLE_PERMS;
+  const togglePerm=(role,field)=>{const cur=perms[role]||[];const next=cur.includes(field)?cur.filter(f=>f!==field):[...cur,field];setRolePerms({...perms,[role]:next});};
+  const ROLES_CFG=[{key:'owner',label:'👤 負責人',desc:'負責人的可編輯欄位'},{key:'tracker',label:'👁 追蹤者',desc:'追蹤者的可編輯欄位'},{key:'collaborator',label:'🔧 協作者',desc:'協作者的可編輯欄位'}];
+  return<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" onClick={onClose}><div className="bg-white rounded-xl shadow-2xl w-full max-w-xl flex flex-col max-h-[88vh]" onClick={e=>e.stopPropagation()}>
+    <div className="flex items-center justify-between px-5 py-4 border-b"><h2 className="font-bold text-base">⚙️ 設定</h2><button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">✕</button></div>
+    <div className="flex border-b px-5 gap-1 pt-2 bg-gray-50 flex-wrap">{[{id:'members',l:'👥 人員'},{id:'admins',l:'👑 管理員'},{id:'perms',l:'🔑 角色權限'},{id:'status',l:'🔖 狀態'},{id:'tags',l:'🏷 組別'}].map(t=><button key={t.id} onClick={()=>setTab(t.id)} className={`px-3 py-2 text-xs font-medium rounded-t border-b-2 ${tab===t.id?'border-indigo-600 text-indigo-700 bg-white':'border-transparent text-gray-500'}`}>{t.l}</button>)}</div>
+    <div className="flex-1 overflow-y-auto p-5">
+      {tab==='members'&&<div><div className="space-y-1.5 mb-4">{(members||[]).map((m,i)=><div key={i} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2"><span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${mc(m,members||[])}`}>{m[0]}</span><span className="flex-1 text-sm">{m}</span><button onClick={()=>setMembers(p=>p.filter((_,j)=>j!==i))} className="text-red-400 text-xs">刪除</button></div>)}</div><div className="flex gap-2"><input className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="新增人員" value={ni} onChange={e=>setNi(e.target.value)} onKeyDown={e=>e.key==='Enter'&&ni.trim()&&(setMembers(p=>[...p,ni.trim()]),setNi(''))}/><button onClick={()=>ni.trim()&&(setMembers(p=>[...p,ni.trim()]),setNi(''))} className="bg-indigo-600 text-white px-4 rounded-lg text-sm">新增</button></div></div>}
+      {tab==='admins'&&<div><p className="text-xs text-gray-500 mb-3 bg-yellow-50 border border-yellow-200 rounded p-2">👑 管理員可編輯所有字卡的全部欄位。管理員同時也可以是追蹤者或協作者，並會出現在個人工作區的對應群組中。</p><div className="space-y-1.5">{(members||[]).map((m,i)=>{const isAdm=(admins||[]).includes(m);return<div key={i} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2"><span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${mc(m,members||[])}`}>{m[0]}</span><span className="flex-1 text-sm">{m}</span>{isAdm&&<span className="text-xs text-red-600 font-bold">👑</span>}<button onClick={()=>setAdmins(p=>isAdm?(p||[]).filter(x=>x!==m):[...(p||[]),m])} className={`text-xs border rounded px-2 py-0.5 ${isAdm?'border-red-300 text-red-500 hover:bg-red-50':'border-gray-300 text-gray-500 hover:bg-gray-100'}`}>{isAdm?'移除':'設管理員'}</button></div>;})}
+      </div></div>}
+      {tab==='perms'&&<div><p className="text-xs text-gray-500 mb-4 bg-indigo-50 border border-indigo-200 rounded p-2">🔑 設定各角色在字卡中可以編輯的欄位。管理員永遠擁有全部權限。</p><div className="space-y-5">{ROLES_CFG.map(({key,label,desc})=>{const allowed=perms[key]||[];return<div key={key} className="border rounded-xl overflow-hidden"><div className="px-4 py-2.5 bg-gray-50 border-b flex items-center justify-between"><div><span className="font-semibold text-sm text-gray-700">{label}</span><span className="text-xs text-gray-400 ml-2">{desc}</span></div><div className="flex gap-2"><button onClick={()=>setRolePerms({...perms,[key]:PERM_FIELDS.map(f=>f.id)})} className="text-xs text-indigo-500 hover:underline">全選</button><button onClick={()=>setRolePerms({...perms,[key]:[]})} className="text-xs text-gray-400 hover:underline">全清</button></div></div><div className="p-3 grid grid-cols-2 gap-2">{PERM_FIELDS.map(f=>{const checked=allowed.includes(f.id);return<label key={f.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer text-xs border transition-colors ${checked?'bg-indigo-50 border-indigo-300 text-indigo-700':'bg-gray-50 border-gray-200 text-gray-500 hover:bg-gray-100'}`}><input type="checkbox" className="hidden" checked={checked} onChange={()=>togglePerm(key,f.id)}/><span className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 ${checked?'bg-indigo-600 border-indigo-600':'border-gray-300'}`}>{checked&&<span className="text-white text-xs">✓</span>}</span>{f.label}</label>;})}</div></div>;})}</div></div>}
+      {tab==='status'&&<div><div className="space-y-1.5 mb-4">{(statuses||[]).map(s=><div key={s.id} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium flex-1 ${s.color}`}>{s.label}</span><button onClick={()=>setStatuses(p=>p.filter(x=>x.id!==s.id))} className="text-red-400 text-xs">刪除</button></div>)}</div><div className="flex gap-2 items-center"><input className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="新狀態" value={nl} onChange={e=>setNl(e.target.value)}/><select className="border rounded-lg px-2 py-2 text-xs" value={nc} onChange={e=>setNc(e.target.value)}>{ST_COLS.map(c=><option key={c.lb} value={c.c}>{c.lb}</option>)}</select><button onClick={()=>nl.trim()&&(setStatuses(p=>[...p,{id:uid(),label:nl.trim(),color:nc}]),setNl(''))} className="bg-indigo-600 text-white px-4 rounded-lg text-sm">新增</button></div></div>}
+      {tab==='tags'&&<div><div className="space-y-1.5 mb-4">{(tags||[]).map((t,i)=><div key={i} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2"><span className={`rounded-full px-2 py-0.5 text-xs font-medium flex-1 ${(tagC||{})[t]||'bg-gray-100'}`}>{t}</span><button onClick={()=>{setTags(p=>p.filter((_,j)=>j!==i));setTagC(p=>{const c={...p};delete c[t];return c})}} className="text-red-400 text-xs">刪除</button></div>)}</div><div className="flex gap-2 items-center"><input className="flex-1 border rounded-lg px-3 py-2 text-sm" placeholder="新組別" value={tnl} onChange={e=>setTnl(e.target.value)}/><select className="border rounded-lg px-2 py-2 text-xs" value={tnc} onChange={e=>setTnc(e.target.value)}>{TAGC_OPTS.map(c=><option key={c.lb} value={c.c}>{c.lb}</option>)}</select><button onClick={()=>{if(!tnl.trim()||(tags||[]).includes(tnl.trim()))return;setTags(p=>[...p,tnl.trim()]);setTagC(p=>({...p,[tnl.trim()]:tnc}));setTnl('')}} className="bg-indigo-600 text-white px-4 rounded-lg text-sm">新增</button></div></div>}
+    </div>
+    <div className="border-t px-5 py-3 flex justify-end bg-gray-50 rounded-b-xl"><button onClick={onClose} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm">完成</button></div>
+  </div></div>;
+}
+function ArchiveModal({cards,updCard,delCard,onClose}){const archived=Object.values(cards||{}).filter(c=>c.archived);return<div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 p-4" onClick={onClose}><div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col" onClick={e=>e.stopPropagation()}><div className="flex items-center justify-between px-5 py-4 border-b"><h2 className="font-bold text-base">📦 封存項目</h2><button onClick={onClose} className="text-gray-400 hover:text-gray-700 text-xl">✕</button></div><div className="flex-1 overflow-y-auto p-4 space-y-2">{archived.length===0?<div className="text-center text-gray-400 py-8">沒有封存項目</div>:archived.map(c=><div key={c.id} className="flex items-center gap-2 bg-gray-50 border rounded-lg px-3 py-2"><span className="flex-1 text-sm">{c.name}</span><button onClick={()=>updCard(c.id,{archived:false})} className="text-indigo-500 text-xs border rounded px-2 py-0.5">還原</button><button onClick={()=>delCard(c.id)} className="text-red-400 text-xs border rounded px-2 py-0.5">刪除</button></div>)}</div><div className="border-t px-5 py-3 flex justify-end bg-gray-50"><button onClick={onClose} className="bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm">關閉</button></div></div></div>;}
+
+/* ══ APP ══ */
+function App(){
+  const fbSt=useFBStatus();
+  const[nodes,setNodes]=useFB('tree_nodes',{});const[cards,setCards]=useFB('tree_cards',{});const[rootNodes,setRootNodes]=useFB('tree_rootNodes',[]);
+  const[statuses,setStatuses]=useFB('statuses',DEF_ST);const[tags,setTags]=useFB('tags',DEF_TAGS);const[tagC,setTagC]=useFB('tagC',DEF_TAGC);
+  const[members,setMembers]=useFB('members',DEF_MEM);const[admins,setAdmins]=useFB('admins',[]);
+  const[rolePerms,setRolePerms]=useFB('rolePerms',DEF_ROLE_PERMS);
+  const[quality,setQuality]=useFB('quality',[]);const[weekly,setWeekly]=useFB('weekly',DEF_WEEKLY);
+  const[curUser,setCurUserRaw]=useState(()=>LS.get('pm_curUser_local','Alice'));
+  const setCurUser=useCallback(u=>{setCurUserRaw(u);LS.set('pm_curUser_local',u);},[]);
+  const loaded=nodes!==null&&cards!==null&&rootNodes!==null&&statuses&&tags&&tagC&&members&&admins!==null&&rolePerms!==null&&weekly;
+  useEffect(()=>{if(loaded&&Object.keys(nodes||{}).length===0){const def=buildDefault();setNodes(def.nodes);setCards(def.cards);setRootNodes(def.rootNodes);}},[loaded]);
+
+  const[curNid,setCurNid]=useState(null);const[view,setView]=useState('board');const[selCard,setSelCard]=useState(null);
+  const[showSettings,setShowSettings]=useState(false);const[showArchive,setShowArchive]=useState(false);
+  const[sideExp,setSideExp]=useState({});
+  const dragNid=useRef(null);const dragOver=useRef(null);
+  const[sDrag,setSDrag]=useState(null);const[sOver,setSOvr]=useState(null);
+  const[showNewN,setShowNewN]=useState(false);const[newNName,setNewNName]=useState('');
+  const[fSt,setFSt]=useState('全部');const[fAs,setFAs]=useState('全部');
+  const[toast,setToast]=useState(null);const showT=useCallback(msg=>{setToast(msg);setTimeout(()=>setToast(null),2200);},[]);
+  const[dragCardId,setDragCardId]=useState(null);
+  const[dropColId,setDropColId]=useState(null);
+  const handleBoardDragEnterCol=useCallback((colId)=>setDropColId(colId),[]);
+  const handleBoardDragLeaveCol=useCallback(()=>setDropColId(null),[]);
+
+  const curNode=useMemo(()=>(nodes||{})[curNid]||null,[nodes,curNid]);
+  const childNodes=useMemo(()=>{if(!curNid)return(rootNodes||[]).map(id=>(nodes||{})[id]).filter(Boolean);return(curNode?.children||[]).map(id=>(nodes||{})[id]).filter(Boolean);},[nodes,curNid,rootNodes,curNode]);
+  const bc=useMemo(()=>breadcrumb(nodes||{},curNid),[nodes,curNid]);
+  const visCards=useMemo(()=>{let vc=nodeCards(nodes||{},cards||{},curNid);if(fSt!=='全部')vc=vc.filter(c=>c.statusId===fSt);if(fAs!=='全部')vc=vc.filter(c=>c.assignee===fAs);return vc;},[nodes,cards,curNid,fSt,fAs]);
+  const st=useMemo(()=>curNid?nodeStats(nodes||{},cards||{},curNid,statuses):{total:0,done:0,overdue:0},[nodes,cards,curNid,statuses]);
+  const hasChildNodes=curNid&&(nodes||{})[curNid]&&((nodes||{})[curNid].children||[]).length>0;
+
+  const updCard=useCallback((id,patch,isNew=false)=>{
+    if(isNew){
+      setCards(prev=>({...(prev||{}),[id]:patch}));
+      if(patch.nodeId){setNodes(prev=>{const nn={...(prev||{})};if(nn[patch.nodeId])nn[patch.nodeId]={...nn[patch.nodeId],cardRefs:[...(nn[patch.nodeId].cardRefs||[]),id]};return nn;});}
+    }else{
+      setCards(prev=>{const next={...(prev||{})};if(!next[id])return prev;next[id]={...next[id],...patch};return next;});
+      setSelCard(s=>s&&s.id===id?{...s,...patch}:s);
+    }
+  },[setCards,setNodes]);
+
+  // 修4：delCard 先清除 selCard，再刪除
+  const delCard=useCallback(id=>{
+    setSelCard(s=>s&&s.id===id?null:s);
+    setCards(prev=>{const next={...(prev||{})};delete next[id];return next;});
+    setNodes(prev=>{const nn=clone(prev||{});Object.values(nn).forEach(n=>{n.cardRefs=(n.cardRefs||[]).filter(r=>r!==id)});return nn;});
+  },[setCards,setNodes]);
+
+  const arcCard=useCallback(id=>{updCard(id,{archived:true});setSelCard(s=>s&&s.id===id?null:s);},[updCard]);
+
+  // 修3：promote 後若 toNid=null，不切換到 null（字卡仍存在於根層卡片）
+  const handlePro=useCallback(cardId=>{
+    const res=promoteCard(nodes||{},cards||{},cardId,curNid);
+    if(!res){showT('⚠ 已在根層');return;}
+    setNodes(res.nodes);setCards(res.cards);
+    const destName=res.toNid?(nodes||{})[res.toNid]?.name:'根目錄';
+    showT(`↑ 已傳遞到「${destName}」`);
+    if(res.toNid!==null)setCurNid(res.toNid);
+    // toNid===null 時保持在目前節點，讓使用者看到字卡已消失（正確移到根層）
+  },[nodes,cards,curNid,setNodes,setCards,showT]);
+
+  const handleDem=useCallback((cardId,toChildId)=>{const res=demoteCard(nodes||{},cards||{},cardId,curNid,toChildId);if(!res){showT('⚠ 無法下放');return;}setNodes(res.nodes);setCards(res.cards);showT(`↓ 已下放到「${(nodes||{})[toChildId]?.name}」`);setCurNid(toChildId);},[nodes,cards,curNid,setNodes,setCards,showT]);
+  const addNode=()=>{if(!newNName.trim())return;const id='n_'+uid();setNodes(prev=>{const next={...(prev||{}),[id]:{id,name:newNName.trim(),parentId:curNid||null,children:[],cardRefs:[]}};if(curNid&&next[curNid])next[curNid]={...next[curNid],children:[...(next[curNid].children||[]),id]};return next;});if(!curNid)setRootNodes(prev=>[...(prev||[]),id]);setNewNName('');setShowNewN(false);};
+  const delNode=nid=>{const n=(nodes||{})[nid];if(!n||(n.children||[]).length||(n.cardRefs||[]).length)return;setNodes(prev=>{const next={...(prev||{})};delete next[nid];if(n.parentId&&next[n.parentId])next[n.parentId]={...next[n.parentId],children:(next[n.parentId].children||[]).filter(id=>id!==nid)};return next;});if(!n.parentId)setRootNodes(prev=>(prev||[]).filter(id=>id!==nid));if(curNid===nid)setCurNid(n.parentId||null);};
+  const renameNode=(nid,name)=>setNodes(prev=>{const next={...(prev||{})};if(next[nid])next[nid]={...next[nid],name};return next;});
+  const onCardDrop=useCallback((cardId,subId,ns,ne)=>{if(subId){updCard(cardId,{subtasks:(((cards||{})[cardId])?.subtasks||[]).map(s=>s.id===subId?{...s,startDate:ns,dueDate:ne}:s)});}else{const up={};if(ns)up.startDate=ns;if(ne)up.dueDate=ne;updCard(cardId,up);}},[updCard,cards]);
+
+  const onSDD=useCallback((nid,e)=>{e.stopPropagation();dragNid.current=nid;e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',nid);setSDrag(nid);},[]);
+  const onSDO=useCallback((nid,e)=>{e.preventDefault();e.stopPropagation();if(dragNid.current&&dragNid.current!==nid){dragOver.current=nid;setSOvr(nid);}},[]);
+  const onSDE=useCallback(()=>{dragNid.current=null;dragOver.current=null;setSDrag(null);setSOvr(null);},[]);
+  const onSDs=useCallback((nid,e)=>{
+    e.preventDefault();e.stopPropagation();
+    const dropEl=e.target.closest('[data-nid]');const dropNid=dropEl?dropEl.getAttribute('data-nid'):nid;
+    const from=dragNid.current;dragNid.current=null;dragOver.current=null;setSDrag(null);setSOvr(null);
+    if(!from||from===dropNid)return;
+    const fromNode=(nodes||{})[from];const toNode=(nodes||{})[dropNid];if(!fromNode||!toNode)return;
+    const isDesc=(parentId,targetId)=>{let cur=parentId;while(cur){if(cur===targetId)return true;cur=(nodes||{})[cur]?.parentId;}return false;};
+    if(isDesc(dropNid,from))return;
+    const fromPid=fromNode.parentId??null;const toPid=toNode.parentId??null;const isSame=fromPid===toPid;
+    setNodes(prev=>{const nn=clone(prev||{});if(fromPid)nn[fromPid]={...nn[fromPid],children:(nn[fromPid].children||[]).filter(id=>id!==from)};
+      if(isSame){if(fromPid!==null){const kids=[...(nn[fromPid]?.children||[])];const tiIdx=kids.indexOf(dropNid);kids.splice(tiIdx>=0?tiIdx:kids.length,0,from);nn[fromPid]={...nn[fromPid],children:kids};}}
+      else{nn[from]={...nn[from],parentId:dropNid};nn[dropNid]={...nn[dropNid],children:[...(nn[dropNid].children||[]),from]};}
+      return nn;});
+    if(isSame&&fromPid===null){setRootNodes(prev=>{const arr=[...(prev||[])];const fi=arr.indexOf(from);const ti=arr.indexOf(dropNid);if(fi<0||ti<0)return prev;arr.splice(fi,1);arr.splice(ti,0,from);return arr;});}
+    else if(!isSame&&fromPid===null){setRootNodes(prev=>(prev||[]).filter(id=>id!==from));}
+  },[nodes,setNodes,setRootNodes]);
+
+  function renderTree(nids,depth){
+    depth=depth||0;
+    return(nids||[]).map(nid=>{
+      const n=(nodes||{})[nid];if(!n)return null;
+      const isA=curNid===nid&&['board','list','gantt','calendar'].includes(view);
+      const hasK=(n.children||[]).length>0;const exp=sideExp[nid]!==false;
+      const ss=nodeStats(nodes||{},cards||{},nid,statuses);
+      const isDragging=sDrag===nid;const isOver=sOver===nid&&sDrag!==nid;
+      const overNode=isOver?(nodes||{})[sDrag]:null;const isSameLevel=isOver&&(overNode?.parentId??null)===(n.parentId??null);
+      const overStyle=isOver?(isSameLevel?'border-t-2 border-indigo-500':'ring-2 ring-green-400 bg-green-50'):'';
+      return(
+        <div key={nid}>
+          <div draggable data-nid={nid} onDragStart={e=>onSDD(nid,e)} onDragOver={e=>onSDO(nid,e)} onDrop={e=>onSDs(nid,e)} onDragEnd={onSDE}
+            className={`flex items-center gap-1 rounded cursor-pointer mx-1 my-0.5 group transition-colors ${isDragging?'opacity-40':''} ${overStyle} ${isA?'bg-indigo-600 text-white':'text-gray-600 hover:bg-gray-200'}`}
+            style={{paddingTop:4,paddingBottom:4,paddingRight:6,paddingLeft:8+depth*14}}
+            onClick={e=>{e.stopPropagation();setCurNid(nid);if(!['board','list','gantt','calendar'].includes(view))setView('board');}}>
+            <span style={{color:isA?'#c7d2fe':'#9ca3af',width:14,textAlign:'center',fontSize:10,flexShrink:0,cursor:'pointer'}} onClick={e=>{e.stopPropagation();setSideExp(p=>({...p,[nid]:!exp}));}}>{hasK?(exp?'▼':'▶'):''}</span>
+            <span className="text-sm flex-shrink-0">📁</span>
+            <InlineEdit value={n.name} cls={`text-xs flex-1 truncate ${isA?'text-white':''}`} onSave={v=>renameNode(nid,v)}/>
+            {ss.total>0&&<span className={`text-xs rounded-full px-1.5 flex-shrink-0 ${isA?'bg-indigo-500 text-indigo-100':'bg-gray-200 text-gray-500'}`}>{ss.total}</span>}
+            <button onClick={e=>{e.stopPropagation();delNode(nid);}} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 flex-shrink-0 text-xs">✕</button>
+          </div>
+          {hasK&&exp&&renderTree(n.children,depth+1)}
+        </div>
+      );
+    });
+  }
+
+  const syncCard=selCard?(cards||{})[selCard.id]||selCard:null;
+  const isPV=['board','list','gantt','calendar'].includes(view);
+  const isRoot=!curNid&&isPV;
+  const VIEWS=[{id:'board',l:'📋 看板'},{id:'list',l:'📄 列表'},{id:'gantt',l:'📊 甘特圖'},{id:'calendar',l:'📅 日曆'}];
+  if(!loaded)return<Loading/>;
+
+  return(
+    <div className="flex h-screen bg-gray-50 text-sm overflow-hidden">
+      <Toast msg={toast}/>
+      <div className="w-52 bg-gray-100 flex flex-col overflow-y-auto flex-shrink-0 border-r border-gray-200">
+        <div className="px-3 py-2.5 border-b bg-white"><div className="font-bold text-gray-800 text-sm mb-1">🎮 閃動格子 遊戲部</div><FBDot s={fbSt}/></div>
+        <div className="px-3 py-2 border-b bg-gray-50">
+          <div className="flex items-center gap-1.5 mb-1"><span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${mc(curUser,members||[])}`}>{curUser[0]}</span><select className="flex-1 border rounded px-1 py-0.5 text-xs bg-white" value={curUser} onChange={e=>setCurUser(e.target.value)}>{(members||[]).map(m=><option key={m}>{m}</option>)}</select></div>
+          {(admins||[]).includes(curUser)&&<span className="text-xs text-red-600 font-bold px-1">👑 管理員</span>}
+          <div className="text-xs text-gray-400 px-1">（僅存本機）</div>
+        </div>
+        <div className="flex-1 overflow-y-auto py-2">
+          <div className={`flex items-center gap-1 px-3 py-1.5 rounded cursor-pointer mx-1 mb-1 ${!curNid&&isPV?'bg-indigo-600 text-white':'text-gray-600 hover:bg-gray-200'}`} onClick={()=>{setCurNid(null);setView('board');}}>
+            <span className="text-sm">🏠</span><span className="text-xs font-medium">根目錄 / 任務總覽</span>
+          </div>
+          {renderTree(rootNodes||[],0)}
+          {showNewN
+            ?<div className="mx-2 mt-2 flex gap-1"><input autoFocus className="flex-1 bg-white text-xs rounded px-1.5 border" value={newNName} onChange={e=>setNewNName(e.target.value)} placeholder="節點名稱" onKeyDown={e=>e.key==='Enter'&&addNode()}/><button onClick={addNode} className="bg-indigo-600 text-white text-xs rounded px-2">確認</button><button onClick={()=>setShowNewN(false)} className="text-red-400 text-xs">✕</button></div>
+            :<div className="px-3 py-1.5 text-gray-400 text-xs cursor-pointer hover:text-gray-600" onClick={()=>setShowNewN(true)}>+ 新增節點</div>}
+        </div>
+        <div className="p-2 border-t space-y-0.5">
+          {[{id:'myWork',l:'👤 個人工作區'},{id:'weekly',l:'📊 週進度'},{id:'quality',l:'🔬 良率檢測'}].map(v=>(
+            <div key={v.id} className={`px-2 py-1.5 rounded cursor-pointer text-xs ${view===v.id?'bg-indigo-600 text-white':'text-gray-600 hover:bg-gray-200'}`} onClick={()=>setView(v.id)}>{v.l}</div>
+          ))}
+          <div className="px-2 py-1.5 rounded cursor-pointer text-xs text-gray-600 hover:bg-gray-200" onClick={()=>setShowArchive(true)}>📦 封存項目</div>
+          <div className="px-2 py-1.5 rounded cursor-pointer text-xs text-green-600 font-medium hover:bg-green-50" onClick={()=>{
+            firebase.database().ref('/').once('value').then(snap=>{
+              const data=JSON.stringify(snap.val(),null,2);
+              const blob=new Blob([data],{type:'application/json'});
+              const a=document.createElement('a');
+              a.href=URL.createObjectURL(blob);
+              const d=new Date();
+              a.download=`遊戲部數據匯出_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}.json`;
+              a.click();
+              showT('✅ 數據已匯出！拖進 Claude 即可產生報表');
+            }).catch(()=>showT('⚠ 匯出失敗，請確認網路連線'));
+          }}>📤 匯出報表數據</div>
+          {(admins||[]).includes(curUser)&&<div className="px-2 py-1.5 rounded cursor-pointer text-xs text-indigo-600 font-medium hover:bg-indigo-50" onClick={()=>setShowSettings(true)}>⚙️ 設定</div>}
+        </div>
+      </div>
+
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <div className="bg-white border-b px-4 py-2 flex items-center gap-3 flex-shrink-0 flex-wrap">
+          {isPV&&<div className="flex items-center gap-1 text-xs font-medium text-gray-700 flex-shrink-0"><button onClick={()=>setCurNid(null)} className={`hover:text-indigo-600 ${!curNid?'font-bold text-gray-800':'text-indigo-500'}`}>🏠</button>{bc.map((n,i)=><span key={n.id} className="flex items-center gap-1"><span className="text-gray-300">›</span><button onClick={()=>setCurNid(n.id)} className={`${i===bc.length-1?'font-bold text-gray-800':'text-indigo-500 hover:underline'}`}>{n.name}</button></span>)}</div>}
+          {isPV&&curNid&&<div className="flex gap-1">{VIEWS.map(t=><button key={t.id} onClick={()=>setView(t.id)} className={`px-3 py-1 rounded text-xs font-medium ${view===t.id?'bg-indigo-600 text-white':'text-gray-500 hover:bg-gray-100'}`}>{t.l}</button>)}</div>}
+          {isPV&&curNid&&view!=='gantt'&&view!=='calendar'&&<div className="flex gap-1 flex-wrap items-center"><select className="border rounded px-2 py-1 text-xs" value={fSt} onChange={e=>setFSt(e.target.value)}><option value="全部">全部狀態</option>{(statuses||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}</select><select className="border rounded px-2 py-1 text-xs" value={fAs} onChange={e=>setFAs(e.target.value)}><option value="全部">全部負責人</option>{(members||[]).map(m=><option key={m}>{m}</option>)}</select></div>}
+          {!isPV&&<span className="font-semibold text-gray-700 text-sm">{{myWork:'👤 個人工作區',weekly:'📊 遊戲組週進度',quality:'🔬 良率檢測'}[view]||''}</span>}
+          {isRoot&&<span className="font-semibold text-gray-700 text-sm">🗺 任務總覽</span>}
+          <div className="ml-auto flex items-center gap-2">
+            <span title={curUser} className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${mc(curUser,members||[])}`}>{curUser[0]}</span>
+            <BellNotif curUser={curUser} members={members||[]} onOpen={id=>{const c=(cards||{})[id];if(c)setSelCard(c);}}/>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4">
+          {isRoot&&<TreeOverview nodes={nodes||{}} cards={cards||{}} statuses={statuses||[]} members={members||[]} tagC={tagC||{}} admins={admins||[]} curUser={curUser} onOpen={setSelCard} updCard={updCard} setCurNid={setCurNid} setView={setView}/>}
+          {isPV&&curNid&&<>
+            <div className="grid grid-cols-3 gap-3 mb-4">{[{v:st.total,l:'全部',c:'text-indigo-600'},{v:st.done,l:'完成',c:'text-green-600'},{v:st.overdue,l:'逾期',c:'text-red-500'}].map(x=><div key={x.l} className="bg-white rounded shadow p-3 text-center"><div className={`text-2xl font-bold ${x.c}`}>{x.v}</div><div className="text-xs text-gray-500">{x.l}</div></div>)}</div>
+            {childNodes.length>0&&<div className="bg-white rounded shadow overflow-hidden mb-4"><div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b"><span className="font-semibold text-sm text-gray-700">📁 子節點 ({childNodes.length})</span><button onClick={()=>setShowNewN(true)} className="text-xs border rounded px-2 py-0.5 text-gray-600 hover:bg-gray-100">+ 新增</button></div>{childNodes.map(n=>{const cs=nodeStats(nodes||{},cards||{},n.id,statuses);const pct=cs.total>0?Math.round(cs.done/cs.total*100):0;return<div key={n.id} className="flex items-center gap-3 px-4 py-2.5 border-b hover:bg-indigo-50 cursor-pointer" onClick={()=>setCurNid(n.id)}><span className="text-base">📁</span><span className="font-semibold text-sm flex-1">{n.name}</span><span className="text-xs text-indigo-600 font-semibold">{cs.total}</span><span className="text-xs text-green-600">✅{cs.done}</span>{cs.overdue>0&&<span className="text-xs text-red-500">⚠{cs.overdue}</span>}<div style={{width:48}}><PBar pct={pct}/></div><span style={{fontSize:10,fontWeight:700,color:pct>=80?'#22c55e':pct>=50?'#f59e0b':'#ef4444',minWidth:28,textAlign:'right'}}>{pct}%</span><button onClick={e=>{e.stopPropagation();delNode(n.id);}} className="text-gray-200 hover:text-red-400 text-xs">✕</button><span className="text-gray-300 text-xs">›</span></div>;})}
+            </div>}
+            {view==='board'&&<div className="flex gap-3 overflow-x-auto pb-4">{(statuses||[]).map(st2=>(
+              <BoardCol key={st2.id} st={st2} visCards={visCards} nodes={nodes||{}} curNodeId={curNid} statuses={statuses||[]} tagC={tagC||{}} members={members||[]} admins={admins||[]} curUser={curUser} updCard={updCard} setSelCard={setSelCard} handlePromote={handlePro} handleDemote={handleDem} arcCard={arcCard} delCard={delCard} dragCardId={dragCardId} setDragCardId={setDragCardId} isDropTarget={dropColId===st2.id} onDragEnterCol={handleBoardDragEnterCol} onDragLeaveCol={handleBoardDragLeaveCol}/>
+            ))}</div>}
+            {view==='list'&&<div className="space-y-3">{(statuses||[]).map(st2=>(
+              <ListStatusGroup key={st2.id} st={st2} stCards={visCards.filter(c=>c.statusId===st2.id)} nodes={nodes||{}} curNid={curNid} statuses={statuses||[]} tagC={tagC||{}} members={members||[]} admins={admins||[]} curUser={curUser} setSelCard={setSelCard} handlePro={handlePro} handleDem={handleDem} arcCard={arcCard} delCard={delCard} updCard={updCard}/>
+            ))}{!visCards.length&&<div className="bg-white rounded shadow text-center text-gray-400 py-16">沒有任務</div>}</div>}
+            {view==='gantt'&&<GanttView cards={cards||{}} nodes={nodes||{}} nid={curNid} statuses={statuses||[]} onOpen={setSelCard} onDrop={onCardDrop} groupByChild={!!hasChildNodes}/>}
+            {view==='calendar'&&<CalView cards={cards||{}} nodes={nodes||{}} nid={curNid} statuses={statuses||[]} tagC={tagC||{}} onOpen={setSelCard} addCard={curNid?(ds=>{const id='c_'+uid();const nc={id,name:'新任務',nodeId:curNid,statusId:(statuses||[])[0]?.id,urgency:'普通',assignee:curUser||'',follower:'',collaborators:[],startDate:today(),dueDate:ds,tags:[],docs:[],comments:[],createdAt:nowFull(),completedAt:null,subtasks:[],archived:false,projectNote:'',trackStart:''};updCard(id,nc,true);setTimeout(()=>setSelCard(nc),80);}):null}/>}
+          </>}
+          {view==='myWork'&&<MyWorkspace cards={cards||{}} nodes={nodes||{}} statuses={statuses||[]} tagC={tagC||{}} members={members||[]} admins={admins||[]} curUser={curUser} setSelCard={setSelCard}/>}
+          {view==='weekly'&&<WeeklyView weekly={weekly||DEF_WEEKLY} setWeekly={setWeekly} members={members||[]}/>}
+          {view==='quality'&&<QualityView quality={quality||[]} setQuality={setQuality} members={members||[]}/>}
+        </div>
+      </div>
+
+      <QNPanel curUser={curUser}/>
+      {syncCard&&<TaskModal task={syncCard} statuses={statuses||[]} tags={tags||[]} tagC={tagC||{}} members={members||[]} admins={admins||[]} rolePerms={rolePerms||DEF_ROLE_PERMS} updTask={updCard} onClose={()=>setSelCard(null)} curUser={curUser}/>}
+      {showSettings&&<SettingsModal onClose={()=>setShowSettings(false)} members={members||[]} setMembers={setMembers} statuses={statuses||[]} setStatuses={setStatuses} tags={tags||[]} tagC={tagC||{}} setTags={setTags} setTagC={setTagC} admins={admins||[]} setAdmins={setAdmins} rolePerms={rolePerms||DEF_ROLE_PERMS} setRolePerms={setRolePerms}/>}
+      {showArchive&&<ArchiveModal cards={cards||{}} updCard={updCard} delCard={delCard} onClose={()=>setShowArchive(false)}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

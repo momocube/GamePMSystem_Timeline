@@ -21,10 +21,18 @@ function recalcTimeRange(){
   NODES.forEach(n=>{if(n.date)allDates.push(new Date(n.date));});
   allDates.push(TODAY);
   if(allDates.length){
-    const min=new Date(Math.min(...allDates));
-    const max=new Date(Math.max(...allDates));
-    min.setDate(1);min.setMonth(min.getMonth()-1); // 1 month padding before
-    max.setMonth(max.getMonth()+3);                // 3 months padding after
+    let min=new Date(Math.min(...allDates));
+    let max=new Date(Math.max(...allDates));
+    // Padding: 1 month before, 2 months after
+    min=new Date(min);min.setDate(1);min.setMonth(min.getMonth()-1);
+    max=new Date(max);max.setMonth(max.getMonth()+2);
+    // Limit: no more than 18 months total to keep timeline manageable
+    const maxDays=Math.round((max-min)/86400000);
+    if(maxDays>548){
+      // Center on today, show 9 months before and 9 months after
+      min=new Date(TODAY);min.setMonth(min.getMonth()-9);min.setDate(1);
+      max=new Date(TODAY);max.setMonth(max.getMonth()+9);
+    }
     START=min; END=max;
   }
 }
@@ -539,25 +547,7 @@ function buildLabels(){
       const durEl=document.createElement('div');durEl.className='lc-duration';
       durEl.textContent=dur!=null?`⏱ ${dur} 天`:'⏱ 無截止日';
       br.appendChild(durEl);
-      // progress
-      const progRow=document.createElement('div');progRow.className='lc-prog-row';
-      const pbar=document.createElement('div');pbar.className='lc-pbar';
-      pbar.title='點擊調整進度';
-      const pfill=document.createElement('div');pfill.className='lc-pfill';pfill.style.cssText=`width:${b.prog}%;background:${displayColor}`;
-      pbar.appendChild(pfill);
-      const pct=document.createElement('div');pct.className='lc-pct';pct.textContent=`${b.prog}%`;
-      pbar.addEventListener('click',e=>openProgPop(e,t.id,b.id));
-      pct.addEventListener('click',e=>openProgPop(e,t.id,b.id));
-      progRow.append(pbar,pct);br.appendChild(progRow);
-      // collaborators (node reporters in this branch)
-      const collabs=document.createElement('div');collabs.className='lc-collabs';
-      const seenM=new Set();
-      NODES.filter(n=>n.branch===b.id).forEach(n=>{
-        [n.member,...(n.collaborators||[])].forEach(mid=>{
-          if(!seenM.has(mid)){seenM.add(mid);collabs.appendChild(makeAv(mid,16));}
-        });
-      });
-      br.appendChild(collabs);
+      // (progress bar and collaborator avatars removed)
       br.style.cursor='pointer';
       br.addEventListener('contextmenu',e=>{
         e.preventDefault();e.stopPropagation();
@@ -1339,31 +1329,7 @@ document.getElementById('nmod-copy').addEventListener('click',()=>{
   });
 });
 
-// ─────────────────────────────────────────────
-// PROGRESS POPOVER
-// ─────────────────────────────────────────────
-function openProgPop(e,trunkId,branchId){
-  e.stopPropagation();
-  const b=TRUNKS.find(t=>t.id===trunkId).branches.find(x=>x.id===branchId);
-  progTarget={trunkId,branchId};
-  const pop=document.getElementById('prog-pop'),range=document.getElementById('prog-range'),val=document.getElementById('prog-val'),cb=document.getElementById('prog-no-end-cb');
-  range.value=b.prog;val.textContent=`${b.prog}%`;cb.checked=b.noEnd;
-  const rect=e.target.getBoundingClientRect();
-  pop.style.left=Math.min(rect.left,window.innerWidth-170)+'px';
-  pop.style.top=(rect.top-90)+'px';pop.classList.add('open');
-}
-document.getElementById('prog-range').addEventListener('input',function(){document.getElementById('prog-val').textContent=`${this.value}%`;});
-document.getElementById('prog-no-end-cb').addEventListener('change',function(){
-  if(!progTarget)return;
-  TRUNKS.find(t=>t.id===progTarget.trunkId).branches.find(x=>x.id===progTarget.branchId).noEnd=this.checked;
-});
-document.addEventListener('click',e=>{
-  const pop=document.getElementById('prog-pop');
-  if(pop.classList.contains('open')&&!pop.contains(e.target)){
-    if(progTarget){const _pt=TRUNKS.find(t=>t.id===progTarget.trunkId);const b=_pt.branches.find(x=>x.id===progTarget.branchId);b.prog=parseInt(document.getElementById('prog-range').value);b.noEnd=document.getElementById('prog-no-end-cb').checked;saveTrunk(_pt);buildLabels();buildTimeline();}
-    pop.classList.remove('open');progTarget=null;
-  }
-});
+// (Progress popover removed)
 
 // ─────────────────────────────────────────────
 // SETTINGS MODAL (Members, Categories, Statuses)
@@ -2024,6 +1990,15 @@ function renderDailyEntries(){
     if(entry._reportGenerated){
       const badge=document.createElement('span');badge.className='daily-reported-badge';badge.textContent='✓ 已回報';
       row.append(cb,brSel,catSel,inp,badge,expBtn,rm);
+      // Click completed entry → scroll timeline to that node
+      if(entry._reportNodeId){
+        row.style.cursor='pointer';
+        row.title='點擊跳轉到時間軸上的回報';
+        row.addEventListener('click',(e)=>{
+          if(e.target.closest('select,input,button,.daily-cb'))return;
+          scrollToNode(entry._reportNodeId);
+        });
+      }
     }else{
       row.append(cb,brSel,catSel,inp,expBtn,rm);
     }
@@ -2052,6 +2027,40 @@ function renderDailyEntries(){
       c.appendChild(detail);
     }
   });
+}
+
+// Scroll timeline to a specific node by ID and flash-highlight it
+function scrollToNode(nodeId){
+  const sa=document.getElementById('sa');
+  const node=NODES.find(n=>n.id===nodeId);
+  if(!node)return;
+  // Switch to timeline view if on dashboard
+  const btnTimeline=document.getElementById('btn-timeline');
+  const btnDash=document.getElementById('btn-dashboard');
+  if(btnDash&&btnDash.classList.contains('active')){
+    btnTimeline.click();
+  }
+  // Scroll horizontally to the node's date
+  const nodeX=dx(node.date);
+  sa.scrollLeft=nodeX-sa.clientWidth*0.35;
+  // Find and highlight the node element
+  setTimeout(()=>{
+    const el=document.querySelector(`.nwrap[data-id="${nodeId}"]`);
+    if(el){
+      // Scroll vertically if needed
+      el.scrollIntoView({behavior:'smooth',block:'center'});
+      // Flash highlight
+      el.style.transition='box-shadow 0.3s, transform 0.3s';
+      el.style.boxShadow='0 0 12px 4px rgba(100,146,197,0.7)';
+      el.style.transform='scale(1.08)';
+      el.style.zIndex='999';
+      setTimeout(()=>{
+        el.style.boxShadow='';
+        el.style.transform='';
+        setTimeout(()=>{el.style.zIndex='';},300);
+      },1500);
+    }
+  },100);
 }
 
 // Visual shake for validation errors
@@ -2259,7 +2268,7 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 
   sa.addEventListener('mousedown',e=>{
     // Don't intercept clicks on interactive elements
-    if(e.target.closest('#prog-pop')||e.target.closest('.nwrap'))return;
+    if(e.target.closest('.nwrap'))return;
     down=true;moved=false;sx=e.clientX;sl=sa.scrollLeft;
   });
 
