@@ -1875,6 +1875,14 @@ function getAllBranches(){
   });
   return list;
 }
+function showDailyWarning(msg){
+  const w=document.getElementById('daily-warning');
+  w.textContent=msg;w.style.display='block';
+}
+function hideDailyWarning(){
+  const w=document.getElementById('daily-warning');
+  w.style.display='none';w.textContent='';
+}
 function buildDailySelects(){
   const ms=document.getElementById('daily-member');
   const prevMember=ms.value;
@@ -1896,8 +1904,21 @@ function renderDailyEntries(){
     // Checkbox
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!entry.done;cb.className='daily-cb';
     cb.addEventListener('change',()=>{
-      dailyEntries[i].done=cb.checked;
-      if(cb.checked) autoGenerateReport(i);
+      if(cb.checked){
+        // Validate: must have branch + note before completing
+        if(!entry.branchId||!entry.note.trim()){
+          cb.checked=false;
+          if(!entry.branchId) shakeEl(row.querySelector('.daily-branch-sel'));
+          if(!entry.note.trim()) shakeEl(row.querySelector('.daily-note-input'));
+          return;
+        }
+        dailyEntries[i].done=true;
+        autoGenerateReport(i);
+      }else{
+        // Undo: uncheck → remove the auto-generated node
+        dailyEntries[i].done=false;
+        undoAutoReport(i);
+      }
       renderDailyEntries();
       autoSyncDaily();
     });
@@ -1987,29 +2008,65 @@ function renderDailyEntries(){
   });
 }
 
+// Visual shake for validation errors
+function shakeEl(el){
+  if(!el)return;
+  el.style.borderColor='#c97b7b';
+  el.classList.add('shake');
+  setTimeout(()=>{el.style.borderColor='';el.classList.remove('shake');},600);
+}
+
+// Check if a date is a holiday or weekend (not a workday)
+function isDayOff(dateStr){
+  if(TW_HOLIDAYS[dateStr])return TW_HOLIDAYS[dateStr];
+  if(TW_MAKEUP_WORKDAYS[dateStr])return false; // 補班日不算放假
+  const d=new Date(dateStr+'T00:00:00');
+  const dow=d.getDay();
+  if(dow===0)return '週日';
+  if(dow===6)return '週六';
+  return false;
+}
+
 // Auto-generate a progress report node when a todo is checked done
 function autoGenerateReport(idx){
   const entry=dailyEntries[idx];
   if(!entry.branchId||!entry.note.trim())return;
-  // Find trunk for this branch
   let tid=null;
   for(const t of TRUNKS){if(t.branches.find(b=>b.id===entry.branchId)){tid=t.id;break;}}
   if(!tid)return;
   const date=document.getElementById('daily-date').value||todayStr;
   const member=document.getElementById('daily-member').value||MEMBERS[0].id;
-  // Build message from todo + optional status note
   let msg=entry.note.trim();
   if(entry.statusNote&&entry.statusNote.trim()){
     msg+='\n\n📋 狀態說明：'+entry.statusNote.trim();
   }
   const nodeLinks=(entry.links&&entry.links.length)?[...entry.links]:[];
-  const nn={id:++NC,trunk:tid,branch:entry.branchId,type:'update',date,member,collaborators:[],msg,notes:'',images:[],links:nodeLinks};
+  const newId=++NC;
+  const nn={id:newId,trunk:tid,branch:entry.branchId,type:'update',date,member,collaborators:[],msg,notes:'',images:[],links:nodeLinks};
   NODES.push(nn);saveNode(nn);
   if(!exp[tid]){exp[tid]=true;}
   buildLabels();buildTimeline();
   if(openTrunkId===tid)openDetailPanel(tid);
-  // Mark as reported
+  // Store the node ID so we can undo later
   dailyEntries[idx]._reportGenerated=true;
+  dailyEntries[idx]._reportNodeId=newId;
+}
+
+// Undo auto-generated report
+function undoAutoReport(idx){
+  const entry=dailyEntries[idx];
+  if(!entry._reportGenerated||!entry._reportNodeId)return;
+  const nodeId=entry._reportNodeId;
+  // Remove from NODES array
+  const ni=NODES.findIndex(n=>n.id===nodeId);
+  if(ni!==-1)NODES.splice(ni,1);
+  // Remove from Firestore
+  if(typeof db!=='undefined'){
+    db.collection('nodes').doc(String(nodeId)).delete().catch(()=>{});
+  }
+  entry._reportGenerated=false;
+  entry._reportNodeId=null;
+  buildLabels();buildTimeline();
 }
 
 // Load entries for a specific date+member from DAILY_REPORTS into dailyEntries
@@ -2031,7 +2088,18 @@ document.getElementById('daily-add').addEventListener('click',()=>{
   renderDailyEntries();
   autoSyncDaily();
 });
-document.getElementById('daily-date').addEventListener('change',()=>{loadDailyEntries();});
+document.getElementById('daily-date').addEventListener('change',()=>{
+  const dateVal=document.getElementById('daily-date').value;
+  if(dateVal){
+    const off=isDayOff(dateVal);
+    if(off){
+      showDailyWarning('⚠️ '+dateVal+' 是「'+off+'」，確定要填寫這天的代辦嗎？');
+    }else{
+      hideDailyWarning();
+    }
+  }
+  loadDailyEntries();
+});
 document.getElementById('daily-member').addEventListener('change',()=>{loadDailyEntries();});
 
 // Auto-sync daily entries: debounce save on every change
