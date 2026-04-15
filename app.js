@@ -73,12 +73,27 @@ let REPORT_TYPES = [
 ];
 function reportTypeObj(id){ return REPORT_TYPES.find(r=>r.id===id)||REPORT_TYPES[0]; }
 
-// Taiwan 2024 holidays
+// Taiwan holidays & make-up workdays (補班日)
 const TW_HOLIDAYS = {
   '2024-01-01':'元旦','2024-02-08':'除夕','2024-02-09':'春節','2024-02-10':'春節',
   '2024-02-11':'春節','2024-02-12':'春節(補假)','2024-02-28':'和平紀念日',
   '2024-04-04':'兒童節','2024-04-05':'清明節','2024-05-01':'勞動節',
   '2024-06-10':'端午節','2024-09-17':'中秋節','2024-10-10':'國慶日',
+  '2025-01-01':'元旦','2025-01-27':'除夕','2025-01-28':'春節','2025-01-29':'春節',
+  '2025-01-30':'春節','2025-01-31':'春節(補假)','2025-02-28':'和平紀念日',
+  '2025-04-03':'兒童節(補假)','2025-04-04':'兒童節','2025-04-05':'清明節',
+  '2025-05-01':'勞動節','2025-05-30':'端午節','2025-05-31':'端午節(補假)',
+  '2025-10-06':'中秋節','2025-10-10':'國慶日',
+  '2026-01-01':'元旦','2026-02-15':'除夕','2026-02-16':'春節','2026-02-17':'春節',
+  '2026-02-18':'春節','2026-02-19':'春節(補假)','2026-02-20':'春節(補假)',
+  '2026-02-28':'和平紀念日','2026-04-04':'兒童節','2026-04-05':'清明節',
+  '2026-05-01':'勞動節','2026-06-19':'端午節','2026-09-25':'中秋節','2026-10-10':'國慶日',
+};
+// 補班日：週六日但需上班的日子
+const TW_MAKEUP_WORKDAYS = {
+  '2024-02-17':'補班(春節)','2024-06-08':'補班(端午)',
+  '2025-01-25':'補班(春節)','2025-02-08':'補班(和平紀念日)',
+  '2026-02-14':'補班(春節)','2026-06-20':'補班(端午)',
 };
 
 // Project statuses
@@ -2014,31 +2029,47 @@ function autoSyncDaily(){
       DAILY_REPORTS.push({id:'dr'+(++DRC),date,branch:'',member,entries:valid.map(e=>({...e}))});
     }
     saveDailyReport(date, member, valid);
-    if(document.getElementById('weekly-panel').style.display==='flex')buildWeekly();
+    buildWeekly();
   },600);
 }
 
 // ─────────────────────────────────────────────
 // WEEKLY PANEL (person rows × date columns)
 // ─────────────────────────────────────────────
+function isWorkday(dateStr){
+  const d=new Date(dateStr+'T00:00:00');
+  const dow=d.getDay(); // 0=Sun,6=Sat
+  // 補班日 = 週末但要上班
+  if(TW_MAKEUP_WORKDAYS[dateStr])return true;
+  // 週六日排除
+  if(dow===0||dow===6)return false;
+  return true;
+}
 function buildWeekly(){
   const ws=getWeekStart(addDays(todayStr,wkOffset*7));
   const we=addDays(ws,6);
   document.getElementById('wk-range').textContent=`${fmtFull(ws)} – ${fmtFull(we)}`;
   const body=document.getElementById('wk-body');body.innerHTML='';
-  // build dates array
-  const dates=[];for(let i=0;i<7;i++)dates.push(addDays(ws,i));
+  // build dates array: only workdays (Mon-Fri + makeup workdays on weekends)
+  const allDates=[];for(let i=0;i<7;i++)allDates.push(addDays(ws,i));
+  const dates=allDates.filter(ds=>isWorkday(ds));
+  if(!dates.length){body.innerHTML='<div style="padding:20px;color:var(--text-dim);font-size:12px;">本週無工作日</div>';return;}
   // build table
   const table=document.createElement('table');table.className='wk-table';
-  // header row: empty + 7 dates
+  // header row: empty + workday dates
   const thead=document.createElement('thead');
   const htr=document.createElement('tr');
   const cornerTh=document.createElement('th');cornerTh.className='wk-member-th';cornerTh.textContent='成員';htr.appendChild(cornerTh);
+  const WEEKDAY_NAMES=['日','一','二','三','四','五','六'];
   dates.forEach(ds=>{
     const th=document.createElement('th');
     if(ds===todayStr)th.classList.add('today');
     if(TW_HOLIDAYS[ds])th.classList.add('holiday');
-    th.textContent=fmtFull(ds)+(TW_HOLIDAYS[ds]?`\n${TW_HOLIDAYS[ds]}`:'');
+    const dow=new Date(ds+'T00:00:00').getDay();
+    let label=fmtFull(ds)+' ('+WEEKDAY_NAMES[dow]+')';
+    if(TW_HOLIDAYS[ds])label+='\n'+TW_HOLIDAYS[ds];
+    if(TW_MAKEUP_WORKDAYS[ds])label+='\n'+TW_MAKEUP_WORKDAYS[ds];
+    th.textContent=label;
     th.style.whiteSpace='pre-line';
     htr.appendChild(th);
   });
