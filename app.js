@@ -1273,6 +1273,27 @@ document.getElementById('nmod-save').addEventListener('click',()=>{
   document.getElementById('nmodal').classList.remove('open');
 });
 
+// Delete button in node modal
+document.getElementById('nmod-del').addEventListener('click',()=>{
+  const n=NODES.find(x=>x.id===currentNodeId);if(!n)return;
+  const m=mem(n.member);
+  const confirmMsg=`確定要刪除這筆回報嗎？\n\n👤 ${m.name}\n📅 ${n.date}\n📝 ${n.msg.substring(0,50)}${n.msg.length>50?'…':''}`;
+  if(!confirm(confirmMsg))return;
+  // Remove from NODES
+  const idx=NODES.findIndex(x=>x.id===currentNodeId);
+  if(idx!==-1)NODES.splice(idx,1);
+  // Remove from Firestore
+  if(typeof db!=='undefined'){
+    db.collection('nodes').doc(String(currentNodeId)).delete().catch(()=>{});
+  }
+  // Remove card from DOM
+  const oldCard=document.querySelector(`.nwrap[data-id="${currentNodeId}"]`);
+  if(oldCard)oldCard.remove();
+  // Close modal and rebuild
+  document.getElementById('nmodal').classList.remove('open');
+  buildLabels();buildTimeline();
+});
+
 // Copy button in node modal
 document.getElementById('nmod-copy').addEventListener('click',()=>{
   const n=NODES.find(x=>x.id===currentNodeId);if(!n)return;
