@@ -107,6 +107,9 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .lc-trunk{height:32px;display:flex;align-items:center;padding:4px 10px;gap:6px;border-bottom:1px solid var(--border2);cursor:pointer;flex-shrink:0;user-select:none;background:var(--surface);transition:background .12s;}
 .lc-trunk-sub{display:flex;align-items:center;gap:4px;width:100%;padding-left:22px;}
 .lc-trunk:hover{background:var(--surface2);}
+.lc-add-br-inline{margin-left:auto;width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-dim);cursor:pointer;flex-shrink:0;transition:all .12s;opacity:0;}
+.lc-trunk:hover .lc-add-br-inline{opacity:1;}
+.lc-add-br-inline:hover{background:var(--surface3);color:var(--text);}
 .lc-trunk.dragging{opacity:.5;background:var(--surface3);}
 .lc-trunk.drag-over{border-top:2px solid var(--accent);}
 .lc-caret{font-size:8px;color:var(--text-dim);transition:transform .2s;flex-shrink:0;}

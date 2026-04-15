@@ -469,7 +469,9 @@ function buildLabels(){
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
     const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background=t.color;
     const nm=document.createElement('span');nm.className='lc-tname';nm.style.color=t.color;nm.textContent=t.name;
-    tr.append(drag,ca,dt,nm);
+    const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
+    addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
+    tr.append(drag,ca,dt,nm,addBrBtn);
     // Right-click context menu for edit/delete
     tr.addEventListener('contextmenu',e=>{
       e.preventDefault();e.stopPropagation();
