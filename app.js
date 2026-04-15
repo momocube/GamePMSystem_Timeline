@@ -673,6 +673,29 @@ document.getElementById('add-trunk-btn').addEventListener('click',()=>{
   document.getElementById('add-trunk-end').value='';
   document.getElementById('add-trunk-modal').classList.add('open');
 });
+document.getElementById('add-branch-quick-btn').addEventListener('click',(e)=>{
+  if(!TRUNKS.length)return;
+  // If only 1 trunk, go directly
+  if(TRUNKS.length===1){openAddBranchModal(TRUNKS[0].id);return;}
+  // Show a quick picker popup
+  document.querySelectorAll('.trunk-picker-pop').forEach(p=>p.remove());
+  const pop=document.createElement('div');pop.className='trunk-picker-pop';
+  pop.style.cssText=`position:fixed;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px var(--shadow2);padding:4px;min-width:140px;`;
+  const rect=e.target.getBoundingClientRect();
+  pop.style.left=rect.left+'px';pop.style.bottom=(window.innerHeight-rect.top+4)+'px';
+  TRUNKS.forEach(t=>{
+    const item=document.createElement('div');
+    item.style.cssText='padding:6px 10px;cursor:pointer;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;';
+    item.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${t.color};flex-shrink:0;"></span>${t.name}`;
+    item.addEventListener('mouseenter',()=>item.style.background='var(--surface2)');
+    item.addEventListener('mouseleave',()=>item.style.background='');
+    item.addEventListener('click',()=>{pop.remove();openAddBranchModal(t.id);});
+    pop.appendChild(item);
+  });
+  document.body.appendChild(pop);
+  const closePopOnClick=(ev)=>{if(!pop.contains(ev.target)){pop.remove();document.removeEventListener('click',closePopOnClick);}};
+  setTimeout(()=>document.addEventListener('click',closePopOnClick),0);
+});
 document.getElementById('add-trunk-close').addEventListener('click',()=>document.getElementById('add-trunk-modal').classList.remove('open'));
 document.getElementById('add-trunk-cancel').addEventListener('click',()=>document.getElementById('add-trunk-modal').classList.remove('open'));
 document.getElementById('add-trunk-modal').addEventListener('click',e=>{if(e.target===document.getElementById('add-trunk-modal'))document.getElementById('add-trunk-modal').classList.remove('open');});
