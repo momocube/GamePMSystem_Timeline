@@ -396,6 +396,9 @@ function buildSelects(){
     const o=document.createElement('option');o.value=m.id;o.textContent=m.name;rp.appendChild(o);
   });
   buildCollabPicks();
+  // Pre-fill date
+  const msdate=document.getElementById('msdate');
+  if(msdate&&!msdate.value)msdate.value=todayStr;
 }
 function populateBranchSelect(){
   const br=document.getElementById('rpbr');br.innerHTML='';
@@ -1712,70 +1715,32 @@ function renderPendPrev(){
     wrap.append(img,rm);c.appendChild(wrap);
   });
 }
-document.querySelectorAll('.tbt').forEach(b=>b.addEventListener('click',()=>{
-  document.querySelectorAll('.tbt').forEach(x=>x.classList.remove('on'));b.classList.add('on');
-  const isNonUpdate=b.dataset.type!=='update';
-  document.getElementById('msdrow').classList.toggle('show',isNonUpdate);
-  // Pre-fill date for non-update types
-  if(isNonUpdate&&!document.getElementById('msdate').value){
-    document.getElementById('msdate').value=todayStr;
-  }
-  const tripForm=document.getElementById('trip-form');
-  const normalMsg=document.getElementById('rmsg');
-  if(b.dataset.type==='trip'){
-    tripForm.style.display='flex';
-    normalMsg.style.display='none';
-  }else{
-    tripForm.style.display='none';
-    normalMsg.style.display='block';
-  }
-}));
 document.getElementById('rprep').addEventListener('change',buildCollabPicks);
 document.getElementById('subbt').addEventListener('click',()=>{
   const bid=document.getElementById('rpbr').value,mk=document.getElementById('rprep').value;
-  const tb=document.querySelector('.tbt.on'),type=tb?tb.dataset.type:'update';
   const di=document.getElementById('msdate').value;
+  const title=(document.getElementById('rp-title')?.value||'').trim();
+  const desc=document.getElementById('rmsg').value.trim();
 
-  let msg='';
-  if(type==='trip'){
-    const location=document.getElementById('trip-location').value.trim();
-    const items=document.getElementById('trip-items').value.trim();
-    const progress=document.getElementById('trip-progress').value.trim();
-    const blockers=document.getElementById('trip-blockers').value.trim();
-    const requests=document.getElementById('trip-requests').value.trim();
-    const incidents=document.getElementById('trip-incidents').value.trim();
-    if(!location&&!items&&!progress&&!blockers&&!requests&&!incidents){
-      document.getElementById('trip-location').style.borderColor='#c97b7b';
-      setTimeout(()=>document.getElementById('trip-location').style.borderColor='',800);
-      return;
-    }
-    msg=`📍 地點：${location}\n📋 處理項目：${items}\n✅ 進展：${progress}\n⚠️ 卡點：${blockers}\n👥 其他人員需求：${requests}\n🚨 突發狀況：${incidents}`;
-  }else{
-    msg=document.getElementById('rmsg').value.trim();
-    if(!msg){document.getElementById('rmsg').style.borderColor='#c97b7b';setTimeout(()=>document.getElementById('rmsg').style.borderColor='',800);return;}
+  if(!title&&!desc){
+    const el=document.getElementById('rp-title')||document.getElementById('rmsg');
+    el.style.borderColor='#c97b7b';setTimeout(()=>el.style.borderColor='',800);return;
   }
 
-  const dateStr=(type!=='update'&&di)?di:todayStr;
+  // Combine title + description into msg
+  let msg=title?(desc?title+'\n\n'+desc:title):desc;
+
+  const dateStr=di||todayStr;
   let tid=null;for(const t of TRUNKS){if(t.branches.find(b=>b.id===bid)){tid=t.id;break;}}
-  const collabs=[];
   const linkVal=document.getElementById('rp-link-input').value.trim();
   const nodeLinks=linkVal?[linkVal]:[];
-  const notesVal=document.getElementById('rp-notes')?.value?.trim()||'';
-  const nn={id:++NC,trunk:tid,branch:bid,type,date:dateStr,member:mk,collaborators:collabs,msg,notes:notesVal,images:[...pendImgs],links:nodeLinks};
+  const nn={id:++NC,trunk:tid,branch:bid,type:'update',date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
   NODES.push(nn);saveNode(nn);pendImgs=[];renderPendPrev();
   if(!exp[tid]){exp[tid]=true;}
-  // Full rebuild to ensure all nodes appear
   buildLabels();buildTimeline();
+  if(document.getElementById('rp-title'))document.getElementById('rp-title').value='';
   document.getElementById('rmsg').value='';
-  document.getElementById('trip-location').value='';
-  document.getElementById('trip-items').value='';
-  document.getElementById('trip-progress').value='';
-  document.getElementById('trip-blockers').value='';
-  document.getElementById('trip-requests').value='';
-  document.getElementById('trip-incidents').value='';
   document.getElementById('rp-link-input').value='';
-  if(document.getElementById('rp-notes'))document.getElementById('rp-notes').value='';
-  document.querySelectorAll('.collab-av').forEach(a=>a.classList.remove('selected'));
   const sb=document.getElementById('subbt');sb.style.background='#6aaa82';sb.textContent='✓';
   setTimeout(()=>{sb.style.background='var(--text)';sb.textContent='↑';},800);
   if(openTrunkId===tid)openDetailPanel(tid);

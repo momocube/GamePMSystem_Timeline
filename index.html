@@ -31,7 +31,6 @@
       <option value="all">全部類型</option>
       <option value="update">📝 進度回報</option>
       <option value="milestone">🏁 里程碑</option>
-      <option value="trip">✈️ 出差/公出</option>
     </select>
     <div class="hdr-sep"></div>
     <div id="mavs"></div>
@@ -69,28 +68,16 @@
 <div id="rp">
   <div id="rp-left">
     <div class="rp-left-header">
-      <div class="rpc" style="width:168px"><div class="rl">BRANCH</div><select id="rp-owner-filter" class="scale-sel" style="width:100%;margin-bottom:6px;font-size:11px;"></select><select id="rpbr" style="overflow-y:auto;line-height:1.8;"></select></div>
-      <div class="rpc" style="width:140px"><div class="rl">回報者 / TYPE</div>
+      <div class="rpc" style="width:168px"><div class="rl">枝幹</div><select id="rp-owner-filter" class="scale-sel" style="width:100%;margin-bottom:6px;font-size:11px;"></select><select id="rpbr" style="overflow-y:auto;line-height:1.8;"></select></div>
+      <div class="rpc" style="width:140px"><div class="rl">回報者</div>
         <select id="rprep" style="margin-bottom:6px;"></select>
-        <div class="tbts">
-          <button class="tbt on" data-type="update">📝 進度回報</button>
-          <button class="tbt" data-type="milestone">🏁 里程碑</button>
-          <button class="tbt" data-type="trip">✈️ 出差/公出</button>
-        </div>
+        <div id="msdrow" style="margin-top:4px;"><input type="date" id="msdate" style="width:100%;"></div>
       </div>
     </div>
-    <div id="rmsgcol"><div class="rl">MESSAGE</div>
+    <div id="rmsgcol"><div class="rl">回報內容</div>
       <div id="rmsginner">
-        <div id="msdrow"><input type="date" id="msdate"></div>
-        <textarea id="rmsg" placeholder="回報這個枝幹的最新進度…"></textarea>
-        <div id="trip-form" style="display:none;flex-direction:column;gap:6px;">
-          <input type="text" id="trip-location" placeholder="地點" class="trip-input">
-          <textarea id="trip-items" placeholder="處理項目" class="trip-textarea" rows="2"></textarea>
-          <textarea id="trip-progress" placeholder="進展" class="trip-textarea" rows="2"></textarea>
-          <textarea id="trip-blockers" placeholder="卡點" class="trip-textarea" rows="2"></textarea>
-          <textarea id="trip-requests" placeholder="其他人員需求" class="trip-textarea" rows="2"></textarea>
-          <textarea id="trip-incidents" placeholder="突發狀況" class="trip-textarea" rows="2"></textarea>
-        </div>
+        <input type="text" id="rp-title" placeholder="標題…" style="padding:5px 8px;font-size:12px;font-weight:600;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
+        <textarea id="rmsg" placeholder="說明…"></textarea>
         <div id="iuparea" onclick="document.getElementById('ifinput').click()">📎 上傳圖片（可多選）</div>
         <input type="file" id="ifinput" accept="image/*" multiple style="display:none">
         <div id="ipreviews"></div>
@@ -98,7 +85,6 @@
           <input type="text" id="rp-link-input" placeholder="📎 貼上附件連結…" style="flex:1;padding:4px 7px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
         </div>
         <div id="rp-link-previews" style="display:flex;flex-direction:column;gap:2px;"></div>
-        <textarea id="rp-notes" placeholder="備註（選填）…" style="padding:5px 8px;resize:none;line-height:1.4;border-radius:4px;font-size:11px;min-height:28px;color:var(--text-dim);flex-shrink:0;"></textarea>
       </div>
     </div>
     <div id="subco"><button class="subbt" id="subbt">↑</button><div class="subhi">送出</div></div>
