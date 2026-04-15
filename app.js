@@ -1876,9 +1876,15 @@ function getAllBranches(){
   return list;
 }
 function buildDailySelects(){
-  const ms=document.getElementById('daily-member');ms.innerHTML='';
+  const ms=document.getElementById('daily-member');
+  const prevMember=ms.value;
+  ms.innerHTML='';
   MEMBERS.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;ms.appendChild(o);});
-  document.getElementById('daily-date').value=todayStr;
+  // Restore previous member selection or default
+  if(prevMember&&MEMBERS.find(m=>m.id===prevMember)){ms.value=prevMember;}
+  const dd=document.getElementById('daily-date');
+  if(!dd.value)dd.value=todayStr;
+  loadDailyEntries();
 }
 function renderDailyEntries(){
   const c=document.getElementById('daily-entries');c.innerHTML='';
@@ -2006,12 +2012,28 @@ function autoGenerateReport(idx){
   dailyEntries[idx]._reportGenerated=true;
 }
 
+// Load entries for a specific date+member from DAILY_REPORTS into dailyEntries
+function loadDailyEntries(){
+  const date=document.getElementById('daily-date').value;
+  const member=document.getElementById('daily-member').value;
+  if(!date||!member){dailyEntries=[{cat:'dev',note:'',branchId:'',done:false,statusNote:'',links:[]}];renderDailyEntries();return;}
+  const existing=DAILY_REPORTS.find(r=>r.date===date&&r.member===member);
+  if(existing&&existing.entries&&existing.entries.length){
+    dailyEntries=existing.entries.map(e=>({cat:e.cat||'dev',note:e.note||'',branchId:e.branchId||'',done:!!e.done,statusNote:e.statusNote||'',links:e.links||[]}));
+  }else{
+    dailyEntries=[{cat:'dev',note:'',branchId:'',done:false,statusNote:'',links:[]}];
+  }
+  renderDailyEntries();
+}
+
 document.getElementById('daily-add').addEventListener('click',()=>{
   dailyEntries.push({cat:'dev',note:'',branchId:'',done:false,statusNote:'',links:[]});
   renderDailyEntries();
+  autoSyncDaily();
 });
-document.getElementById('daily-date').addEventListener('change',()=>{autoSyncDaily();});
-document.getElementById('daily-member').addEventListener('change',()=>{autoSyncDaily();});
+document.getElementById('daily-date').addEventListener('change',()=>{loadDailyEntries();});
+document.getElementById('daily-member').addEventListener('change',()=>{loadDailyEntries();});
+
 // Auto-sync daily entries: debounce save on every change
 let _dailySyncTimer=null;
 function autoSyncDaily(){
@@ -2019,16 +2041,16 @@ function autoSyncDaily(){
   _dailySyncTimer=setTimeout(()=>{
     const date=document.getElementById('daily-date').value;
     const member=document.getElementById('daily-member').value;
+    if(!date||!member)return;
     // Strip internal UI flags before saving
     const valid=dailyEntries.filter(e=>e.note.trim()).map(e=>({cat:e.cat,note:e.note,branchId:e.branchId||'',done:!!e.done,statusNote:e.statusNote||'',links:e.links||[]}));
-    if(!valid.length||!date)return;
     const existing=DAILY_REPORTS.find(r=>r.date===date&&r.member===member);
     if(existing){
-      existing.entries=valid.map(e=>({...e}));
-    }else{
+      existing.entries=valid.length?valid.map(e=>({...e})):[];
+    }else if(valid.length){
       DAILY_REPORTS.push({id:'dr'+(++DRC),date,branch:'',member,entries:valid.map(e=>({...e}))});
     }
-    saveDailyReport(date, member, valid);
+    if(valid.length) saveDailyReport(date, member, valid);
     buildWeekly();
   },600);
 }
