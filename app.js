@@ -1,9 +1,33 @@
 // ─────────────────────────────────────────────
 // DATA
 // ─────────────────────────────────────────────
-const START = new Date('2024-03-01');
-const END   = new Date('2024-06-30');
-const TODAY = new Date('2024-04-20');
+const TODAY = new Date();
+// START/END will be recalculated dynamically based on trunk data
+let START = new Date(TODAY);
+let END   = new Date(TODAY);
+START.setMonth(START.getMonth()-2); // default: 2 months before today
+END.setMonth(END.getMonth()+4);     // default: 4 months after today
+
+function recalcTimeRange(){
+  const allDates=[];
+  TRUNKS.forEach(t=>{
+    if(t.start)allDates.push(new Date(t.start));
+    if(t.end)allDates.push(new Date(t.end));
+    (t.branches||[]).forEach(b=>{
+      if(b.start)allDates.push(new Date(b.start));
+      if(b.end)allDates.push(new Date(b.end));
+    });
+  });
+  NODES.forEach(n=>{if(n.date)allDates.push(new Date(n.date));});
+  allDates.push(TODAY);
+  if(allDates.length){
+    const min=new Date(Math.min(...allDates));
+    const max=new Date(Math.max(...allDates));
+    min.setDate(1);min.setMonth(min.getMonth()-1); // 1 month padding before
+    max.setMonth(max.getMonth()+3);                // 3 months padding after
+    START=min; END=max;
+  }
+}
 const BASE_DP = 88;
 let DP = 88;
 
@@ -211,6 +235,7 @@ function startRealtimeSync() {
       snap.docs.forEach(d => TRUNKS.push(d.data()));
       Object.keys(exp).forEach(k => { if (!TRUNKS.find(t => t.id === k)) delete exp[k]; });
       TRUNKS.forEach(t => { if (!(t.id in exp)) exp[t.id] = false; });
+      recalcTimeRange();
       buildLabels(); buildTimeline(); buildSelects(); buildDailySelects(); updateHeaderRange();
     }),
     db.collection('nodes').orderBy('date','desc').onSnapshot(snap => {
@@ -218,7 +243,7 @@ function startRealtimeSync() {
       NODES.length = 0;
       snap.docs.forEach(d => { const n = d.data(); n.id = isNaN(n.id) ? n.id : Number(n.id); NODES.push(n); });
       NC = NODES.reduce((mx, n) => Math.max(mx, typeof n.id === 'number' ? n.id : 0), NC);
-      buildTimeline();
+      recalcTimeRange();buildTimeline();
     }),
     db.collection('members').onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites) return;
@@ -2272,6 +2297,7 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 // RENDER
 // ─────────────────────────────────────────────
 function render(){
+  recalcTimeRange();
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildHeaderAvatars();buildOwnerFilter();buildLabels();buildTimeline();buildSelects();buildDailySelects();renderDailyEntries();updateHeaderRange();
   document.getElementById('tdline').style.left=(dx(todayStr)+DP/2)+'px';
