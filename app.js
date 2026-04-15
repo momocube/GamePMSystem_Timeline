@@ -483,7 +483,7 @@ function buildLabels(){
     body.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
-    bg.style.height=exp[t.id]?(t.branches.length*BH()+32)+'px':'0px';
+    if(exp[t.id]){bg.classList.add('open');}else{bg.style.height='0px';}
     t.branches.forEach((b,bidx)=>{
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
       const br=document.createElement('div');br.className='lc-br';
@@ -1131,7 +1131,8 @@ function toggle(id){
   const t=TRUNKS.find(x=>x.id===id);const h=t.branches.length*BH();
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
-  const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);if(lb)lb.style.height=(open?h+32:0)+'px';
+  const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);
+  if(lb){if(open){lb.classList.add('open');lb.style.height='';}else{lb.classList.remove('open');lb.style.height='0px';}}
   const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);if(tb)tb.style.height=(open?h:0)+'px';
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
   if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());addPills(tr,t);}
