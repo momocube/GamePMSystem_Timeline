@@ -105,7 +105,7 @@ let activeType='all',activeMems=new Set(),activeOwner='all',pendImgs=[],editImgs
 let currentNodeId=null,slIdx=0,slImgs=[];
 let progTarget=null;
 let openTrunkId=null; // for detail panel
-let dailyEntries=[{cat:'dev',note:''}];
+let dailyEntries=[{cat:'dev',note:'',branchId:'',done:false,statusNote:'',links:[]}];
 let wkOffset=0; // weeks offset from TODAY's week
 let currentView='timeline';
 
@@ -1860,8 +1860,15 @@ document.getElementById('btn-collapse-bot').addEventListener('click',()=>{
 })();
 
 // ─────────────────────────────────────────────
-// DAILY PANEL
+// DAILY PANEL (代辦 → 自動回報)
 // ─────────────────────────────────────────────
+function getAllBranches(){
+  const list=[];
+  TRUNKS.forEach(t=>{
+    t.branches.forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
+  });
+  return list;
+}
 function buildDailySelects(){
   const ms=document.getElementById('daily-member');ms.innerHTML='';
   MEMBERS.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;ms.appendChild(o);});
@@ -1869,29 +1876,134 @@ function buildDailySelects(){
 }
 function renderDailyEntries(){
   const c=document.getElementById('daily-entries');c.innerHTML='';
+  const allBranches=getAllBranches();
   dailyEntries.forEach((entry,i)=>{
-    const row=document.createElement('div');row.className='daily-entry';
-    const sel=document.createElement('select');
-    CATS.forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.label;o.style.background=cat.bg;o.style.color=cat.color;if(cat.id===entry.cat)o.selected=true;sel.appendChild(o);});
-    // Set the select's own color to match selected category
-    const selCat=catObj(entry.cat);
-    sel.style.background=selCat.bg;
-    sel.style.color=selCat.color;
-    sel.style.fontWeight='600';
-    sel.addEventListener('change',()=>{
-      dailyEntries[i].cat=sel.value;
-      const sc=catObj(sel.value);
-      sel.style.background=sc.bg;sel.style.color=sc.color;
+    // --- Main row ---
+    const row=document.createElement('div');row.className='daily-entry'+(entry.done?' done':'');
+
+    // Checkbox
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!entry.done;cb.className='daily-cb';
+    cb.addEventListener('change',()=>{
+      dailyEntries[i].done=cb.checked;
+      if(cb.checked) autoGenerateReport(i);
+      renderDailyEntries();
       autoSyncDaily();
     });
-    const inp=document.createElement('input');inp.type='text';inp.placeholder='說明…';inp.value=entry.note;
+
+    // Branch selector
+    const brSel=document.createElement('select');brSel.className='daily-branch-sel';
+    const defOpt=document.createElement('option');defOpt.value='';defOpt.textContent='── 枝幹 ──';brSel.appendChild(defOpt);
+    allBranches.forEach(b=>{
+      const o=document.createElement('option');o.value=b.branchId;
+      o.textContent=b.trunkName+' / '+b.branchName;
+      o.style.color=b.branchColor;
+      if(b.branchId===entry.branchId)o.selected=true;
+      brSel.appendChild(o);
+    });
+    if(entry.branchId){
+      const matched=allBranches.find(b=>b.branchId===entry.branchId);
+      if(matched){brSel.style.borderLeft='3px solid '+matched.branchColor;}
+    }
+    brSel.addEventListener('change',()=>{
+      dailyEntries[i].branchId=brSel.value;
+      const matched=allBranches.find(b=>b.branchId===brSel.value);
+      brSel.style.borderLeft=matched?'3px solid '+matched.branchColor:'';
+      autoSyncDaily();
+    });
+
+    // Category selector
+    const catSel=document.createElement('select');catSel.className='daily-cat-sel';
+    CATS.forEach(cat=>{const o=document.createElement('option');o.value=cat.id;o.textContent=cat.label;o.style.background=cat.bg;o.style.color=cat.color;if(cat.id===entry.cat)o.selected=true;catSel.appendChild(o);});
+    const selCat=catObj(entry.cat);
+    catSel.style.background=selCat.bg;catSel.style.color=selCat.color;catSel.style.fontWeight='600';
+    catSel.addEventListener('change',()=>{
+      dailyEntries[i].cat=catSel.value;
+      const sc=catObj(catSel.value);
+      catSel.style.background=sc.bg;catSel.style.color=sc.color;
+      autoSyncDaily();
+    });
+
+    // Note input
+    const inp=document.createElement('input');inp.type='text';inp.className='daily-note-input';
+    inp.placeholder='代辦事項…';inp.value=entry.note;
+    if(entry.done)inp.style.textDecoration='line-through';
     inp.addEventListener('input',()=>{dailyEntries[i].note=inp.value;autoSyncDaily();});
+
+    // Expand/collapse details button
+    const expBtn=document.createElement('button');expBtn.className='daily-exp-btn';
+    expBtn.textContent=entry._expanded?'▾':'▸';expBtn.title='展開詳細';
+    expBtn.addEventListener('click',()=>{
+      dailyEntries[i]._expanded=!dailyEntries[i]._expanded;
+      renderDailyEntries();
+    });
+
+    // Remove button
     const rm=document.createElement('button');rm.className='daily-rm';rm.textContent='✕';
-    rm.addEventListener('click',()=>{if(dailyEntries.length>1){dailyEntries.splice(i,1);renderDailyEntries();}});
-    row.append(sel,inp,rm);c.appendChild(row);
+    rm.addEventListener('click',()=>{if(dailyEntries.length>1){dailyEntries.splice(i,1);renderDailyEntries();autoSyncDaily();}});
+
+    // Auto-report indicator
+    if(entry._reportGenerated){
+      const badge=document.createElement('span');badge.className='daily-reported-badge';badge.textContent='✓ 已回報';
+      row.append(cb,brSel,catSel,inp,badge,expBtn,rm);
+    }else{
+      row.append(cb,brSel,catSel,inp,expBtn,rm);
+    }
+    c.appendChild(row);
+
+    // --- Expandable detail row ---
+    if(entry._expanded){
+      const detail=document.createElement('div');detail.className='daily-detail';
+
+      // Status note (optional)
+      const noteLabel=document.createElement('span');noteLabel.className='daily-detail-label';noteLabel.textContent='狀態說明';
+      const noteArea=document.createElement('textarea');noteArea.className='daily-detail-textarea';
+      noteArea.placeholder='補充說明（選填）…';noteArea.value=entry.statusNote||'';noteArea.rows=2;
+      noteArea.addEventListener('input',()=>{dailyEntries[i].statusNote=noteArea.value;autoSyncDaily();});
+
+      // Link attachment
+      const linkLabel=document.createElement('span');linkLabel.className='daily-detail-label';linkLabel.textContent='附件連結';
+      const linkInput=document.createElement('input');linkInput.type='text';linkInput.className='daily-detail-link';
+      linkInput.placeholder='貼上附件連結…';linkInput.value=(entry.links&&entry.links.length)?entry.links[0]:'';
+      linkInput.addEventListener('input',()=>{
+        dailyEntries[i].links=linkInput.value.trim()?[linkInput.value.trim()]:[];
+        autoSyncDaily();
+      });
+
+      detail.append(noteLabel,noteArea,linkLabel,linkInput);
+      c.appendChild(detail);
+    }
   });
 }
-document.getElementById('daily-add').addEventListener('click',()=>{dailyEntries.push({cat:'dev',note:''});renderDailyEntries();});
+
+// Auto-generate a progress report node when a todo is checked done
+function autoGenerateReport(idx){
+  const entry=dailyEntries[idx];
+  if(!entry.branchId||!entry.note.trim())return;
+  // Find trunk for this branch
+  let tid=null;
+  for(const t of TRUNKS){if(t.branches.find(b=>b.id===entry.branchId)){tid=t.id;break;}}
+  if(!tid)return;
+  const date=document.getElementById('daily-date').value||todayStr;
+  const member=document.getElementById('daily-member').value||MEMBERS[0].id;
+  // Build message from todo + optional status note
+  let msg=entry.note.trim();
+  if(entry.statusNote&&entry.statusNote.trim()){
+    msg+='\n\n📋 狀態說明：'+entry.statusNote.trim();
+  }
+  const nodeLinks=(entry.links&&entry.links.length)?[...entry.links]:[];
+  const nn={id:++NC,trunk:tid,branch:entry.branchId,type:'update',date,member,collaborators:[],msg,notes:'',images:[],links:nodeLinks};
+  NODES.push(nn);saveNode(nn);
+  if(!exp[tid]){exp[tid]=true;}
+  buildLabels();buildTimeline();
+  if(openTrunkId===tid)openDetailPanel(tid);
+  // Mark as reported
+  dailyEntries[idx]._reportGenerated=true;
+}
+
+document.getElementById('daily-add').addEventListener('click',()=>{
+  dailyEntries.push({cat:'dev',note:'',branchId:'',done:false,statusNote:'',links:[]});
+  renderDailyEntries();
+});
 document.getElementById('daily-date').addEventListener('change',()=>{autoSyncDaily();});
 document.getElementById('daily-member').addEventListener('change',()=>{autoSyncDaily();});
 // Auto-sync daily entries: debounce save on every change
@@ -1901,18 +2013,16 @@ function autoSyncDaily(){
   _dailySyncTimer=setTimeout(()=>{
     const date=document.getElementById('daily-date').value;
     const member=document.getElementById('daily-member').value;
-    const valid=dailyEntries.filter(e=>e.note.trim());
+    // Strip internal UI flags before saving
+    const valid=dailyEntries.filter(e=>e.note.trim()).map(e=>({cat:e.cat,note:e.note,branchId:e.branchId||'',done:!!e.done,statusNote:e.statusNote||'',links:e.links||[]}));
     if(!valid.length||!date)return;
-    // find existing report for same date+member and update, or create new
     const existing=DAILY_REPORTS.find(r=>r.date===date&&r.member===member);
     if(existing){
       existing.entries=valid.map(e=>({...e}));
     }else{
-      const branch=TRUNKS.flatMap(t=>t.branches).length>0?TRUNKS.flatMap(t=>t.branches)[0].id:'';
-      DAILY_REPORTS.push({id:'dr'+(++DRC),date,branch,member,entries:valid.map(e=>({...e}))});
+      DAILY_REPORTS.push({id:'dr'+(++DRC),date,branch:'',member,entries:valid.map(e=>({...e}))});
     }
     saveDailyReport(date, member, valid);
-    // If weekly panel is visible, refresh it
     if(document.getElementById('weekly-panel').style.display==='flex')buildWeekly();
   },600);
 }
@@ -1961,7 +2071,13 @@ function buildWeekly(){
           dr.entries.forEach(e=>{
             const card=document.createElement('div');card.className='wk-card';
             const cat=catObj(e.cat);
-            card.innerHTML=`<span style="font-size:7px;padding:1px 3px;border-radius:2px;background:${cat.bg};color:${cat.color};font-weight:600;margin-right:3px;display:inline-block;vertical-align:middle;">${cat.label}</span><span class="wk-card-msg" style="white-space:normal;overflow:visible;max-width:none;">${e.note}</span>`;
+            let brTag='';
+            if(e.branchId){
+              const allBr=getAllBranches();const br=allBr.find(b=>b.branchId===e.branchId);
+              if(br)brTag=`<span style="font-size:7px;padding:1px 3px;border-radius:2px;background:${br.branchColor}22;color:${br.branchColor};font-weight:600;margin-right:3px;display:inline-block;vertical-align:middle;">${br.branchName}</span>`;
+            }
+            const doneIcon=e.done?'<span style="color:#0f7b6c;font-size:9px;margin-right:2px;">✓</span>':'';
+            card.innerHTML=`${doneIcon}<span style="font-size:7px;padding:1px 3px;border-radius:2px;background:${cat.bg};color:${cat.color};font-weight:600;margin-right:3px;display:inline-block;vertical-align:middle;">${cat.label}</span>${brTag}<span class="wk-card-msg" style="white-space:normal;overflow:visible;max-width:none;">${e.note}</span>`;
             td.appendChild(card);
           });
         });
