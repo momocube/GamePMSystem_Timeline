@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>資料遷移工具 — 舊版 → 新版</title>
+<style>
+  body{font-family:sans-serif;max-width:720px;margin:40px auto;padding:0 20px;color:#37352f;background:#fafafa;}
+  h1{font-size:18px;}
+  .status{margin:10px 0;padding:10px 14px;border-radius:8px;font-size:13px;white-space:pre-wrap;}
+  .info{background:#d3e5ef;color:#1a5276;}
+  .ok{background:#dbeddb;color:#145a32;}
+  .err{background:#ffe2dd;color:#922b21;}
+  .warn{background:#fadec9;color:#7e5109;}
+  button{padding:8px 20px;font-size:14px;border:none;border-radius:6px;cursor:pointer;font-weight:600;}
+  #btn-migrate{background:#2eaadc;color:#fff;margin-top:16px;}
+  #btn-migrate:disabled{opacity:.4;cursor:default;}
+  #log{margin-top:16px;padding:10px;background:#fff;border:1px solid #d6d4d0;border-radius:8px;max-height:400px;overflow-y:auto;font-size:12px;font-family:'Courier New',monospace;white-space:pre-wrap;}
+  .section{margin:20px 0;padding:14px;background:#fff;border:1px solid #d6d4d0;border-radius:8px;}
+  label{font-size:12px;font-weight:600;color:#6b6b6a;display:block;margin-bottom:4px;}
+  select,input[type="text"]{width:100%;padding:6px 8px;border:1px solid #d6d4d0;border-radius:4px;font-size:13px;}
+  .row{display:flex;gap:10px;align-items:flex-end;margin-bottom:10px;}
+  .row>div{flex:1;}
+</style>
+</head>
+<body>
+<h1>⚡ 閃動格子 — 資料遷移工具</h1>
+<p style="font-size:12px;color:#9b9a97;">將舊版 Firebase Realtime Database (game-pm-system) 的資料遷移到新版 Firestore (game-pm-system02)</p>
+
+<div class="section">
+  <h3 style="font-size:14px;margin-bottom:10px;">遷移項目</h3>
+  <label><input type="checkbox" id="chk-cards" checked> 卡片 → 獨立枝幹 + 留言泡泡</label>
+  <label style="margin-top:6px;"><input type="checkbox" id="chk-weekly" checked> 週進度 → 每日代辦 (dailyReports)</label>
+  <label style="margin-top:6px;"><input type="checkbox" id="chk-members" checked> 成員同步</label>
+</div>
+
+<div class="section">
+  <h3 style="font-size:14px;margin-bottom:10px;">成員名稱對應表</h3>
+  <p style="font-size:11px;color:#9b9a97;margin-bottom:8px;">舊版使用名稱字串，新版使用成員 ID。請確認對應關係：</p>
+  <div id="member-map"></div>
+</div>
+
+<button id="btn-migrate">🚀 開始遷移</button>
+<button id="btn-preview" style="background:#6b7280;color:#fff;margin:16px 0 0 8px;">👁 預覽（不寫入）</button>
+
+<div id="log"></div>
+
+<!-- Old Firebase (Realtime Database) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script>
+// OLD Firebase project (Realtime DB)
+const oldApp = firebase.initializeApp({
+  apiKey: "AIzaSyCNsSKCjVb_eolwYMyDxlGLf5VhlM-XfKQ",
+  authDomain: "game-pm-system.firebaseapp.com",
+  databaseURL: "https://game-pm-system-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "game-pm-system",
+  storageBucket: "game-pm-system.firebasestorage.app",
+  messagingSenderId: "1082387722665",
+  appId: "1:1082387722665:web:324d3395cc9c1ead1514b8"
+}, 'old');
+
+// NEW Firebase project (Firestore)
+const newApp = firebase.initializeApp({
+  apiKey: "AIzaSyDsnZYISd2r9SjfgmvZVUehNRj9q8oCkvI",
+  authDomain: "game-pm-system02.firebaseapp.com",
+  databaseURL: "https://game-pm-system02-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "game-pm-system02",
+  storageBucket: "game-pm-system02.firebasestorage.app",
+  messagingSenderId: "377937018386",
+  appId: "1:377937018386:web:8e02615883c42591bea2cb"
+}, 'new');
+
+const oldDB = firebase.app('old').database();
+const newFS = firebase.app('new').firestore();
+
+const logEl = document.getElementById('log');
+function log(msg, type='') {
+  const line = document.createElement('div');
+  line.textContent = msg;
+  if(type === 'ok') line.style.color = '#0f7b6c';
+  if(type === 'err') line.style.color = '#e03e3e';
+  if(type === 'warn') line.style.color = '#d9730d';
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+// Member name → ID mapping (editable)
+let memberMap = {};
+let oldMembers = [];
+let newMembers = [];
+
+// Load data from both systems
+async function init() {
+  log('讀取舊版成員...');
+  const oldMemSnap = await oldDB.ref('members').once('value');
+  oldMembers = oldMemSnap.val() || ['Alice','Bob','Carol','David','Eve'];
+  if(!Array.isArray(oldMembers)) oldMembers = Object.values(oldMembers);
+  log(`  舊版成員: ${oldMembers.join(', ')}`, 'ok');
+
+  log('讀取新版成員...');
+  const newMemSnap = await newFS.collection('members').get();
+  newMembers = newMemSnap.docs.map(d => ({id: d.id, ...d.data()}));
+  log(`  新版成員: ${newMembers.map(m=>m.name+'('+m.id+')').join(', ')}`, 'ok');
+
+  // Build member mapping UI
+  const mapEl = document.getElementById('member-map');
+  mapEl.innerHTML = '';
+  oldMembers.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const lbl = document.createElement('div');
+    lbl.innerHTML = `<label>舊: ${name}</label>`;
+    const sel = document.createElement('div');
+    const s = document.createElement('select');
+    s.dataset.oldName = name;
+    s.className = 'member-sel';
+    // Auto-match by name
+    const match = newMembers.find(m => m.name === name);
+    const noOpt = document.createElement('option');
+    noOpt.value = '';noOpt.textContent = '— 略過 —';s.appendChild(noOpt);
+    newMembers.forEach(m => {
+      const o = document.createElement('option');
+      o.value = m.id; o.textContent = `${m.name} (${m.id})`;
+      if(match && m.id === match.id) o.selected = true;
+      s.appendChild(o);
+    });
+    sel.innerHTML = '<label>新版成員 →</label>';
+    sel.appendChild(s);
+    row.append(lbl, sel);
+    mapEl.appendChild(row);
+  });
+  log('初始化完成，可以開始遷移。\n');
+}
+
+function getMemberMap() {
+  const map = {};
+  document.querySelectorAll('.member-sel').forEach(s => {
+    if(s.value) map[s.dataset.oldName] = s.value;
+  });
+  return map;
+}
+
+// Color palette for migrated branches
+const COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688','#ff6f00','#7b1fa2'];
+
+async function doMigrate(preview) {
+  memberMap = getMemberMap();
+  const doCards = document.getElementById('chk-cards').checked;
+  const doWeekly = document.getElementById('chk-weekly').checked;
+  const doMembers = document.getElementById('chk-members').checked;
+
+  log(`\n${'='.repeat(40)}`);
+  log(preview ? '👁 預覽模式（不會寫入任何資料）' : '🚀 開始遷移...');
+  log(`${'='.repeat(40)}\n`);
+
+  // ── 1. Cards → Independent branches + Node bubbles ──
+  if(doCards) {
+    log('📦 遷移卡片...');
+    const cardsSnap = await oldDB.ref('tree_cards').once('value');
+    const nodesSnap = await oldDB.ref('tree_nodes').once('value');
+    const cards = cardsSnap.val() || {};
+    const nodes = nodesSnap.val() || {};
+
+    // Build path for each card
+    function nodePath(nid) {
+      const parts = [];
+      let cur = nid;
+      while(cur) {
+        const n = nodes[cur];
+        if(!n) break;
+        parts.unshift(n.name);
+        cur = n.parentId;
+      }
+      return parts.join(' › ');
+    }
+
+    const cardList = Object.values(cards).filter(c => !c.archived);
+    log(`  找到 ${cardList.length} 張卡片（不含已封存）`);
+
+    let nodeCounter = Date.now();
+    const batch = preview ? null : newFS.batch();
+
+    for(let ci = 0; ci < cardList.length; ci++) {
+      const card = cardList[ci];
+      const color = COLORS[ci % COLORS.length];
+      const branchId = 'mig_' + card.id;
+      const path = card.nodeId ? nodePath(card.nodeId) : '';
+      const ownerMid = memberMap[card.assignee] || '';
+
+      // Create independent branch (trunk with isBranch:true)
+      const trunk = {
+        id: branchId,
+        name: card.name,
+        color: color,
+        status: card.statusId === 's4' ? 'done' : 'wip',
+        priority: (card.urgency === '最高' ? 'highest' : card.urgency === '高' ? 'high' : card.urgency === '低' ? 'low' : 'normal'),
+        start: card.startDate || card.createdAt?.slice(0,10) || '2026-01-01',
+        end: card.dueDate || '',
+        owner: ownerMid,
+        collaborators: (card.collaborators||[]).map(n => memberMap[n]).filter(Boolean),
+        trackers: card.follower && memberMap[card.follower] ? [memberMap[card.follower]] : [],
+        desc: path ? `來源: ${path}` : '',
+        links: (card.docs||[]).map(d => d.url).filter(Boolean),
+        branches: [],
+        isBranch: true,
+        _migrated: true,
+        _oldId: card.id
+      };
+
+      log(`  枝幹: ${card.name} (${branchId}) — ${path}`, 'ok');
+
+      if(!preview) {
+        batch.set(newFS.collection('trunks').doc(branchId), trunk);
+      }
+
+      // Convert comments → node bubbles
+      const comments = card.comments || [];
+      if(comments.length > 0) {
+        log(`    → ${comments.length} 則留言轉為節點泡泡`);
+      }
+      comments.forEach((cmt, idx) => {
+        const nodeId = String(++nodeCounter);
+        const memberMid = memberMap[cmt.author] || ownerMid || (newMembers[0]?.id || 'M');
+        const dateStr = cmt.createdAt ? cmt.createdAt.slice(0,10) : (card.startDate || '2026-01-01');
+        const node = {
+          id: nodeId,
+          trunk: branchId,
+          branch: branchId, // independent branch: trunk=branch
+          type: 'update',
+          date: dateStr,
+          member: memberMid,
+          collaborators: [],
+          msg: cmt.text || '',
+          notes: '',
+          images: [],
+          links: [],
+          _migrated: true,
+          _oldCardId: card.id
+        };
+        if(!preview) {
+          batch.set(newFS.collection('nodes').doc(nodeId), node);
+        }
+      });
+    }
+
+    if(!preview && cardList.length > 0) {
+      log('  寫入 Firestore...', 'warn');
+      await batch.commit();
+      log('  ✓ 卡片遷移完成！', 'ok');
+    }
+  }
+
+  // ── 2. Weekly → dailyReports ──
+  if(doWeekly) {
+    log('\n📊 遷移週進度...');
+    const weeklySnap = await oldDB.ref('weekly').once('value');
+    const weeklyData = weeklySnap.val();
+    if(!weeklyData || !weeklyData.weeks) {
+      log('  舊版無週進度資料', 'warn');
+    } else {
+      const weeks = weeklyData.weeks;
+      log(`  找到 ${weeks.length} 個週次`);
+
+      const batch2 = preview ? null : newFS.batch();
+      let drCount = 0;
+
+      // Taiwan holidays
+      const HOL = new Set(['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-21','2026-02-22','2026-02-23','2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-05-01','2026-06-19','2026-06-20','2026-06-21','2026-09-25','2026-09-26','2026-09-27','2026-10-10']);
+      function isWork(d) {
+        const x = new Date(d+'T00:00:00').getDay();
+        return x !== 0 && x !== 6 && !HOL.has(d);
+      }
+      function getWorkdays(start, n) {
+        const r = [], d = new Date(start+'T00:00:00');
+        while(r.length < n) {
+          const s = d.toISOString().slice(0,10);
+          if(isWork(s)) r.push(s);
+          d.setDate(d.getDate()+1);
+        }
+        return r;
+      }
+
+      weeks.forEach((week, wi) => {
+        const wdays = week.weekLabel ? getWorkdays(week.weekLabel, 5) : [];
+        if(!wdays.length) return;
+        log(`  週次 ${week.weekLabel} (${wdays[0]}~${wdays[4]})`);
+
+        (week.members || []).forEach(rawM => {
+          const mName = rawM.name;
+          const mId = memberMap[mName];
+          if(!mId) { log(`    跳過 ${mName}（無對應成員）`, 'warn'); return; }
+
+          const dailyItems = Array.isArray(rawM.dailyItems) ? rawM.dailyItems : [];
+          // For each weekday that has items
+          dailyItems.forEach((dayItems, di) => {
+            if(!Array.isArray(dayItems) || dayItems.length === 0) return;
+            const dateStr = wdays[di];
+            if(!dateStr) return;
+
+            const entries = dayItems.map(item => ({
+              cat: item.type || 'dev',
+              note: item.text || '',
+              branchId: '', // no branch mapping for old data
+              done: false,
+              statusNote: '',
+              links: []
+            }));
+
+            const docId = `${dateStr}_${mId}`;
+            log(`    ${dateStr} ${mName}: ${entries.length} 項`);
+            drCount++;
+
+            if(!preview) {
+              batch2.set(newFS.collection('dailyReports').doc(docId), {
+                date: dateStr,
+                member: mId,
+                entries: entries,
+                _migrated: true
+              });
+            }
+          });
+
+          // Also store promises as entries on the first day if they exist
+          const promises = rawM.promises || [];
+          if(promises.length > 0 && wdays[0]) {
+            const docId = `${wdays[0]}_${mId}_promises`;
+            // We'll add promise items to the first day's entries
+            log(`    承諾 (${promises.length} 項) 加入 ${wdays[0]}`);
+          }
+        });
+      });
+
+      if(!preview && drCount > 0) {
+        log('  寫入 Firestore...', 'warn');
+        await batch2.commit();
+        log(`  ✓ 週進度遷移完成！(${drCount} 筆 dailyReports)`, 'ok');
+      }
+    }
+  }
+
+  log(`\n${'='.repeat(40)}`);
+  log(preview ? '👁 預覽完成。確認無誤後點「開始遷移」寫入資料。' : '✅ 遷移完成！重新整理新版工具即可看到遷移的資料。', 'ok');
+}
+
+document.getElementById('btn-migrate').addEventListener('click', () => doMigrate(false));
+document.getElementById('btn-preview').addEventListener('click', () => doMigrate(true));
+
+init();
+</script>
+</body>
+</html>

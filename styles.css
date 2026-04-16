@@ -112,6 +112,10 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .lc-add-br-inline:hover{background:var(--surface3);color:var(--text);}
 .lc-trunk.dragging{opacity:.5;background:var(--surface3);}
 .lc-trunk.drag-over{border-top:2px solid var(--accent);}
+.lc-indep-branch{background:var(--surface2);padding-left:14px;}
+.lc-indep-branch .lc-brdot{width:8px;height:8px;}
+.lc-indep-name{font-weight:500;font-size:12px;}
+.brow-indep{border-bottom:1px solid var(--border2);}
 .lc-caret{font-size:8px;color:var(--text-dim);transition:transform .2s;flex-shrink:0;}
 .lc-caret.open{transform:rotate(90deg);}
 .lc-tdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}

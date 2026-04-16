@@ -292,8 +292,23 @@ const fmt = d => { const dt=new Date(d); return`${dt.getMonth()+1}/${dt.getDate(
 const fmtFull = d => { const dt=new Date(d+'T00:00:00'); const dn=['日','一','二','三','四','五','六']; return`${dt.getMonth()+1}/${dt.getDate()}(${dn[dt.getDay()]})`; };
 const BH  = () => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--branch-h'));
 const mem = id => MEMBERS.find(m=>m.id===id)||{name:'?',color:'#aaa'};
-const branchObj = id => TRUNKS.flatMap(t=>t.branches).find(b=>b.id===id);
+const branchObj = id => {
+  // Check nested branches first
+  const nested = TRUNKS.flatMap(t=>t.branches).find(b=>b.id===id);
+  if(nested) return nested;
+  // Check independent branch-trunks (isBranch:true, their trunk id IS the branch id)
+  const indep = TRUNKS.find(t=>t.isBranch && t.id===id);
+  if(indep) return {id:indep.id,name:indep.name,start:indep.start,end:indep.end,color:indep.color,prog:0,noEnd:!indep.end};
+  return undefined;
+};
 const calcDuration = b => { if(b.noEnd||!b.end) return null; return Math.round((new Date(b.end)-new Date(b.start))/86400000); };
+// Find trunk id for a given branch id (handles independent branches)
+function trunkForBranch(bid){
+  const indep=TRUNKS.find(t=>t.isBranch&&t.id===bid);
+  if(indep) return indep.id;
+  for(const t of TRUNKS){if(t.branches.find(b=>b.id===bid))return t.id;}
+  return null;
+}
 function initials(name){ return name.slice(0,1).toUpperCase(); }
 function makeAv(mid, size=22, extra=''){
   const m=mem(mid),d=document.createElement('div');d.className='av';
@@ -451,17 +466,28 @@ function buildSelects(){
 function populateBranchSelect(){
   const br=document.getElementById('rpbr');br.innerHTML='';
   const filtered=rpOwnerFilter==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===rpOwnerFilter);
-  filtered.forEach(t=>{
+  let totalOpts=0;
+  // Independent branches first
+  const indeps=filtered.filter(t=>t.isBranch);
+  if(indeps.length){
+    const grp=document.createElement('optgroup');grp.label='獨立枝幹';
+    indeps.forEach(t=>{
+      const o=document.createElement('option');o.value=t.id;o.textContent=t.name;grp.appendChild(o);
+      totalOpts++;
+    });
+    br.appendChild(grp);
+  }
+  // Normal trunks with child branches
+  filtered.filter(t=>!t.isBranch).forEach(t=>{
     const grp=document.createElement('optgroup');
     grp.label=t.name;
     t.branches.forEach(b=>{
       const o=document.createElement('option');o.value=b.id;
       o.textContent=b.name;grp.appendChild(o);
+      totalOpts++;
     });
     br.appendChild(grp);
   });
-  // Count total options for size
-  const totalOpts=filtered.reduce((s,t)=>s+t.branches.length,0);
   br.size=Math.min(6,Math.max(2,totalOpts+filtered.length));
 }
 
@@ -494,19 +520,88 @@ function updateHeaderRange(){
 let dragTrunkIdx=null;
 function buildLabels(){
   const body=document.getElementById('lbody');body.innerHTML='';
+  // Drop zone: dragging a child branch here makes it independent
+  body.addEventListener('dragover',e=>{
+    if(e.dataTransfer.types.includes('type'))e.preventDefault();
+  });
+  body.addEventListener('drop',e=>{
+    const dropType=e.dataTransfer.getData('type');
+    if(dropType==='child-branch'){
+      e.preventDefault();e.stopPropagation();
+      const srcTrunkId=e.dataTransfer.getData('trunkId');
+      const srcBranchId=e.dataTransfer.getData('branchId');
+      const srcTrunk=TRUNKS.find(x=>x.id===srcTrunkId);
+      if(!srcTrunk)return;
+      const bi=srcTrunk.branches.findIndex(x=>x.id===srcBranchId);
+      if(bi===-1)return;
+      const [branch]=srcTrunk.branches.splice(bi,1);
+      // Create independent trunk from branch
+      const newTrunk={id:branch.id,name:branch.name,color:branch.color||srcTrunk.color,status:'wip',priority:'normal',start:branch.start,end:branch.end||'',owner:srcTrunk.owner||'',collaborators:[],trackers:[],desc:'',links:[],branches:[],isBranch:true};
+      TRUNKS.push(newTrunk);
+      exp[newTrunk.id]=false;
+      saveTrunk(srcTrunk);saveTrunk(newTrunk);
+      buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
+    }
+  });
   const filtered=activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner);
   filtered.forEach((t,ti)=>{
+    // ── Independent branch (isBranch trunk) ──
+    if(t.isBranch){
+      const ibr=document.createElement('div');ibr.className='lc-trunk lc-indep-branch';ibr.dataset.trunk=t.id;
+      ibr.draggable=true;
+      ibr.addEventListener('dragstart',e=>{dragTrunkIdx=TRUNKS.indexOf(t);ibr.classList.add('dragging');e.dataTransfer.setData('type','indep-branch');e.dataTransfer.effectAllowed='move';});
+      ibr.addEventListener('dragend',()=>{ibr.classList.remove('dragging');document.querySelectorAll('.lc-trunk').forEach(x=>x.classList.remove('drag-over'));dragTrunkIdx=null;});
+      ibr.addEventListener('dragover',e=>{e.preventDefault();ibr.classList.add('drag-over');});
+      ibr.addEventListener('dragleave',()=>ibr.classList.remove('drag-over'));
+      ibr.addEventListener('drop',e=>{
+        e.preventDefault();ibr.classList.remove('drag-over');
+        const toIdx=TRUNKS.indexOf(t);
+        if(dragTrunkIdx!==null&&dragTrunkIdx!==toIdx){
+          const [moved]=TRUNKS.splice(dragTrunkIdx,1);TRUNKS.splice(toIdx,0,moved);
+          buildLabels();buildTimeline();updateHeaderRange();
+        }
+        dragTrunkIdx=null;
+      });
+      const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
+      const bd=document.createElement('span');bd.className='lc-brdot';bd.style.background=t.color;
+      const bn=document.createElement('span');bn.className='lc-tname lc-indep-name';bn.style.color=t.color;bn.textContent=t.name;
+      ibr.append(drag,bd,bn);
+      ibr.addEventListener('contextmenu',e=>{
+        e.preventDefault();e.stopPropagation();
+        showContextMenu(e,t.id,null);
+      });
+      ibr.addEventListener('click',e=>{if(e.target===drag)return;openDetailPanel(t.id);});
+      body.appendChild(ibr);
+      return; // no child bg needed
+    }
+
+    // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='lc-trunk';tr.dataset.trunk=t.id;
     tr.draggable=true;
     // drag reorder
-    tr.addEventListener('dragstart',e=>{dragTrunkIdx=TRUNKS.indexOf(t);tr.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
-    tr.addEventListener('dragend',()=>{tr.classList.remove('dragging');document.querySelectorAll('.lc-trunk').forEach(x=>x.classList.remove('drag-over'));});
+    tr.addEventListener('dragstart',e=>{dragTrunkIdx=TRUNKS.indexOf(t);tr.classList.add('dragging');e.dataTransfer.setData('type','trunk');e.dataTransfer.effectAllowed='move';});
+    tr.addEventListener('dragend',()=>{tr.classList.remove('dragging');document.querySelectorAll('.lc-trunk').forEach(x=>x.classList.remove('drag-over'));dragTrunkIdx=null;});
+    // Accept drop of independent branch INTO this trunk
     tr.addEventListener('dragover',e=>{e.preventDefault();tr.classList.add('drag-over');});
     tr.addEventListener('dragleave',()=>tr.classList.remove('drag-over'));
     tr.addEventListener('drop',e=>{
       e.preventDefault();tr.classList.remove('drag-over');
+      const dropType=e.dataTransfer.getData('type');
       const toIdx=TRUNKS.indexOf(t);
-      if(dragTrunkIdx!==null&&dragTrunkIdx!==toIdx){
+      if(dropType==='indep-branch'&&dragTrunkIdx!==null){
+        // Move independent branch INTO this trunk as a child branch
+        const moved=TRUNKS[dragTrunkIdx];
+        if(moved&&moved.isBranch&&moved.id!==t.id){
+          TRUNKS.splice(dragTrunkIdx,1);
+          const newBranch={id:moved.id,name:moved.name,start:moved.start,end:moved.end||null,color:t.color,prog:0,noEnd:!moved.end};
+          t.branches.push(newBranch);
+          saveTrunk(t);
+          // Delete the old independent trunk from Firestore
+          if(_firestoreReady&&typeof db!=='undefined')db.collection('trunks').doc(moved.id).delete().catch(()=>{});
+          if(!exp[t.id])toggle(t.id);
+          buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
+        }
+      } else if(dragTrunkIdx!==null&&dragTrunkIdx!==toIdx){
         const [moved]=TRUNKS.splice(dragTrunkIdx,1);TRUNKS.splice(toIdx,0,moved);
         buildLabels();buildTimeline();updateHeaderRange();
       }
@@ -537,6 +632,17 @@ function buildLabels(){
     t.branches.forEach((b,bidx)=>{
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
       const br=document.createElement('div');br.className='lc-br';
+      br.draggable=true;
+      // Drag child branch out → becomes independent
+      br.addEventListener('dragstart',e=>{
+        e.stopPropagation();
+        e.dataTransfer.setData('type','child-branch');
+        e.dataTransfer.setData('trunkId',t.id);
+        e.dataTransfer.setData('branchId',b.id);
+        e.dataTransfer.effectAllowed='move';
+        br.classList.add('dragging');
+      });
+      br.addEventListener('dragend',()=>br.classList.remove('dragging'));
       // top row
       const top=document.createElement('div');top.className='lc-brtop';
       const bd=document.createElement('div');bd.className='lc-brdot';bd.style.background=displayColor;
@@ -704,16 +810,22 @@ document.getElementById('add-trunk-btn').addEventListener('click',()=>{
   document.getElementById('add-trunk-modal').classList.add('open');
 });
 document.getElementById('add-branch-quick-btn').addEventListener('click',(e)=>{
-  if(!TRUNKS.length)return;
-  // If only 1 trunk, go directly
-  if(TRUNKS.length===1){openAddBranchModal(TRUNKS[0].id);return;}
-  // Show a quick picker popup
+  // Show a quick picker popup: pick trunk or create independent
   document.querySelectorAll('.trunk-picker-pop').forEach(p=>p.remove());
   const pop=document.createElement('div');pop.className='trunk-picker-pop';
-  pop.style.cssText=`position:fixed;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px var(--shadow2);padding:4px;min-width:140px;`;
+  pop.style.cssText=`position:fixed;z-index:300;background:var(--surface);border:1px solid var(--border);border-radius:6px;box-shadow:0 4px 16px var(--shadow2);padding:4px;min-width:160px;`;
   const rect=e.target.getBoundingClientRect();
   pop.style.left=rect.left+'px';pop.style.bottom=(window.innerHeight-rect.top+4)+'px';
-  TRUNKS.forEach(t=>{
+  // Independent branch option
+  const indepItem=document.createElement('div');
+  indepItem.style.cssText='padding:6px 10px;cursor:pointer;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;font-weight:600;color:var(--accent);border-bottom:1px solid var(--border);margin-bottom:2px;';
+  indepItem.textContent='＋ 獨立枝幹';
+  indepItem.addEventListener('mouseenter',()=>indepItem.style.background='var(--surface2)');
+  indepItem.addEventListener('mouseleave',()=>indepItem.style.background='');
+  indepItem.addEventListener('click',()=>{pop.remove();openAddBranchModal(null);});
+  pop.appendChild(indepItem);
+  // Trunk options
+  TRUNKS.filter(t=>!t.isBranch).forEach(t=>{
     const item=document.createElement('div');
     item.style.cssText='padding:6px 10px;cursor:pointer;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;';
     item.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${t.color};flex-shrink:0;"></span>${t.name}`;
@@ -745,15 +857,20 @@ document.getElementById('add-trunk-confirm').addEventListener('click',()=>{
 });
 
 function openAddBranchModal(trunkId){
-  addBranchTargetTrunk=trunkId;
-  const t=TRUNKS.find(x=>x.id===trunkId);
+  addBranchTargetTrunk=trunkId; // null = independent branch
+  const t=trunkId?TRUNKS.find(x=>x.id===trunkId):null;
   document.getElementById('add-branch-name').value='';
   document.getElementById('add-branch-start').value=todayStr;
   document.getElementById('add-branch-end').value='';
   // show auto-derived color preview
-  const nextIdx=t?t.branches.length+1:1;
-  const derivedCol=t?deriveColor(t.color,nextIdx):deriveColor('#6492c5',nextIdx);
-  document.getElementById('add-branch-color-swatch').style.background=derivedCol;
+  if(t){
+    const nextIdx=t.branches.length+1;
+    document.getElementById('add-branch-color-swatch').style.background=deriveColor(t.color,nextIdx);
+    document.getElementById('add-branch-color-preview').querySelector('label').textContent='顏色（自動衍生自主幹）';
+  } else {
+    document.getElementById('add-branch-color-swatch').style.background='#6492c5';
+    document.getElementById('add-branch-color-preview').querySelector('label').textContent='顏色（獨立枝幹）';
+  }
   document.getElementById('add-branch-modal').classList.add('open');
 }
 document.getElementById('add-branch-close').addEventListener('click',()=>document.getElementById('add-branch-modal').classList.remove('open'));
@@ -763,7 +880,20 @@ document.getElementById('add-branch-confirm').addEventListener('click',()=>{
   const name=document.getElementById('add-branch-name').value.trim();
   const start=document.getElementById('add-branch-start').value;
   const end=document.getElementById('add-branch-end').value;
-  if(!name||!start||!addBranchTargetTrunk)return;
+  if(!name||!start)return;
+
+  if(!addBranchTargetTrunk){
+    // Create independent branch (stored as trunk with isBranch:true)
+    const id='b'+Date.now().toString(36);
+    const newTrunk={id,name,color:'#6492c5',status:'wip',priority:'normal',start,end:end||'',owner:MEMBERS[0]?.id||'',collaborators:[],trackers:[],desc:'',links:[],branches:[],isBranch:true};
+    TRUNKS.push(newTrunk);
+    exp[id]=false;
+    saveTrunk(newTrunk);
+    document.getElementById('add-branch-modal').classList.remove('open');
+    buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
+    return;
+  }
+
   const t=TRUNKS.find(x=>x.id===addBranchTargetTrunk);if(!t)return;
   const id='b'+Date.now().toString(36);
   // Use trunk color — deriveColor will be applied at render time
@@ -961,6 +1091,40 @@ function buildTimeline(){
   const rows=document.getElementById('rows');rows.innerHTML='';
   const filtered=activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner);
   filtered.forEach(t=>{
+    // ── Independent branch-trunk: render as a single branch row ──
+    if(t.isBranch){
+      const brow=document.createElement('div');brow.className='brow brow-indep';brow.dataset.branch=t.id;brow.dataset.trunk=t.id;
+      const displayColor=t.color;
+      // stem
+      const st=document.createElement('div');st.className='stem';
+      st.style.cssText=`left:${dx(t.start)}px;background:${displayColor}`;brow.appendChild(st);
+      // start marker
+      const mk=document.createElement('div');mk.className='bmark';mk.style.left=dx(t.start)+'px';
+      const mkd=document.createElement('div');mkd.className='bmark-dot';mkd.style.background=displayColor;
+      const mklbl=document.createElement('div');mklbl.className='bmark-date';mklbl.textContent=fmt(t.start);
+      mk.append(mkd,mklbl);brow.appendChild(mk);
+      // bar
+      const bb=document.createElement('div');bb.className='bbar';
+      if(!t.end){
+        const w=tw()-dx(t.start);
+        bb.style.cssText=`left:${dx(t.start)}px;width:${w}px;background:${displayColor};opacity:.4;background:repeating-linear-gradient(90deg,${displayColor} 0,${displayColor} 8px,transparent 8px,transparent 14px);`;
+      } else {
+        bb.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor}`;
+        const el=document.createElement('div');el.className='endlbl';
+        el.style.left=(dx(t.end)+4)+'px';el.textContent=fmt(t.end);brow.appendChild(el);
+      }
+      brow.appendChild(bb);
+      // Nodes: for independent branch, branch id = trunk id
+      NODES.filter(n=>n.branch===t.id).forEach(n=>addCard(n,brow));
+      spreadOverlappingCards(brow);
+      alternateCardPositions(brow);
+      brow.style.cursor='pointer';
+      brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openDetailPanel(t.id);});
+      rows.appendChild(brow);
+      return;
+    }
+
+    // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='trow';tr.dataset.trunk=t.id;
     const bar=document.createElement('div');bar.className='tbar';
     bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
@@ -1182,8 +1346,10 @@ function alternateCardPositions(brow){
 // TOGGLE TRUNK
 // ─────────────────────────────────────────────
 function toggle(id){
+  const t=TRUNKS.find(x=>x.id===id);
+  if(!t||t.isBranch)return; // independent branches have nothing to toggle
   exp[id]=!exp[id];const open=exp[id];
-  const t=TRUNKS.find(x=>x.id===id);const h=t.branches.length*BH();
+  const h=t.branches.length*BH();
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
   const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);
@@ -1317,7 +1483,8 @@ document.getElementById('nmod-copy').addEventListener('click',()=>{
   const branchName=b?b.name:'—';
   // Find trunk name
   let trunkName='';
-  for(const t of TRUNKS){if(t.branches.find(br=>br.id===n.branch)){trunkName=t.name;break;}}
+  const _tid=trunkForBranch(n.branch);
+  if(_tid){const _tt=TRUNKS.find(x=>x.id===_tid);if(_tt)trunkName=_tt.isBranch?'':_tt.name;}
   const hasImg=(n.images&&n.images.length>0)?'有':'無';
   // Format like a bank notification card
   const notesLine=n.notes?`\n📎 備註：${n.notes}`:'';
@@ -1542,7 +1709,7 @@ function buildDashboard(){
   metrics.appendChild(totalCard);
 
   // Total branches
-  const totalBranches=TRUNKS.reduce((s,t)=>s+t.branches.length,0);
+  const totalBranches=TRUNKS.reduce((s,t)=>s+(t.isBranch?1:t.branches.length),0);
   const brCard=document.createElement('div');brCard.className='dash-metric-card';
   brCard.innerHTML=`<div class="dm-value">${totalBranches}</div><div class="dm-label">枝幹總數</div>`;
   metrics.appendChild(brCard);
@@ -1784,7 +1951,7 @@ document.getElementById('subbt').addEventListener('click',()=>{
   let msg=title?(desc?title+'\n\n'+desc:title):desc;
 
   const dateStr=di||todayStr;
-  let tid=null;for(const t of TRUNKS){if(t.branches.find(b=>b.id===bid)){tid=t.id;break;}}
+  let tid=trunkForBranch(bid);
   const linkVal=document.getElementById('rp-link-input').value.trim();
   const nodeLinks=linkVal?[linkVal]:[];
   const nn={id:++NC,trunk:tid,branch:bid,type:'update',date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
@@ -1883,7 +2050,12 @@ document.getElementById('btn-collapse-bot').addEventListener('click',()=>{
 function getAllBranches(){
   const list=[];
   TRUNKS.forEach(t=>{
-    t.branches.forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
+    if(t.isBranch){
+      // Independent branch-trunk: branch id = trunk id
+      list.push({trunkId:null,trunkName:'(獨立)',trunkColor:t.color,branchId:t.id,branchName:t.name,branchColor:t.color});
+    } else {
+      t.branches.forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
+    }
   });
   return list;
 }
@@ -2086,8 +2258,7 @@ function isDayOff(dateStr){
 function autoGenerateReport(idx){
   const entry=dailyEntries[idx];
   if(!entry.branchId||!entry.note.trim())return;
-  let tid=null;
-  for(const t of TRUNKS){if(t.branches.find(b=>b.id===entry.branchId)){tid=t.id;break;}}
+  let tid=trunkForBranch(entry.branchId);
   if(!tid)return;
   const date=document.getElementById('daily-date').value||todayStr;
   const member=document.getElementById('daily-member').value||MEMBERS[0].id;
