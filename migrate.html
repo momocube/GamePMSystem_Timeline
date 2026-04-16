@@ -209,16 +209,27 @@ async function doMigrate(preview) {
       log('  所有成員已存在，無需新增', 'ok');
     }
 
-    // Update the mapping UI to reflect auto-matched members
+    // Update the mapping UI: add new options and select them
     document.querySelectorAll('.member-sel').forEach(s => {
       const mapped = memberMap[s.dataset.oldName];
-      if(mapped) s.value = mapped;
+      if(!mapped) return;
+      // Ensure option exists
+      if(!s.querySelector(`option[value="${mapped}"]`)) {
+        const mObj = newMembers.find(m => m.id === mapped);
+        const o = document.createElement('option');
+        o.value = mapped;
+        o.textContent = `${mObj ? mObj.name : mapped} (${mapped})`;
+        s.appendChild(o);
+      }
+      s.value = mapped;
     });
     log('');
   }
 
-  // Re-read memberMap from UI (in case user adjusted)
-  memberMap = getMemberMap();
+  // Merge UI selections back (UI may have user-adjusted values)
+  document.querySelectorAll('.member-sel').forEach(s => {
+    if(s.value) memberMap[s.dataset.oldName] = s.value;
+  });
 
   // ── 1. Cards → Independent branches + Node bubbles ──
   if(doCards) {
@@ -347,6 +358,14 @@ async function doMigrate(preview) {
         return r;
       }
 
+      // Category name → new ID mapping
+      const CAT_MAP = {
+        '研發':'dev','設計':'design','外包':'outsource','文件':'doc',
+        '工務':'eng','維護':'maintain','外展':'outreach','出差':'trip',
+        '公出':'business','會議':'meeting','雜項':'misc','請假':'leave'
+      };
+      function mapCat(type) { return CAT_MAP[type] || 'dev'; }
+
       weeks.forEach((week, wi) => {
         const wdays = week.weekLabel ? getWorkdays(week.weekLabel, 5) : [];
         if(!wdays.length) return;
@@ -357,26 +376,49 @@ async function doMigrate(preview) {
           const mId = memberMap[mName];
           if(!mId) { log(`    跳過 ${mName}（無對應成員）`, 'warn'); return; }
 
+          // Collect all entries per date (daily items + promises on first day)
+          const dateEntries = {}; // dateStr → entries[]
+
           const dailyItems = Array.isArray(rawM.dailyItems) ? rawM.dailyItems : [];
-          // For each weekday that has items
           dailyItems.forEach((dayItems, di) => {
             if(!Array.isArray(dayItems) || dayItems.length === 0) return;
             const dateStr = wdays[di];
             if(!dateStr) return;
+            if(!dateEntries[dateStr]) dateEntries[dateStr] = [];
+            dayItems.forEach(item => {
+              dateEntries[dateStr].push({
+                cat: mapCat(item.type),
+                note: item.text || '',
+                branchId: '',
+                done: false,
+                statusNote: '',
+                links: []
+              });
+            });
+          });
 
-            const entries = dayItems.map(item => ({
-              cat: item.type || 'dev',
-              note: item.text || '',
-              branchId: '', // no branch mapping for old data
-              done: false,
-              statusNote: '',
-              links: []
-            }));
+          // Add promises as entries on the first workday
+          const promises = rawM.promises || [];
+          if(promises.length > 0 && wdays[0]) {
+            if(!dateEntries[wdays[0]]) dateEntries[wdays[0]] = [];
+            promises.forEach(p => {
+              if(!p.text) return;
+              dateEntries[wdays[0]].push({
+                cat: 'dev',
+                note: '📌 ' + p.text + (p.status ? ' (' + p.status + ')' : ''),
+                branchId: '',
+                done: p.status === '已完成',
+                statusNote: p.status || '',
+                links: []
+              });
+            });
+          }
 
+          // Write each date's entries
+          Object.entries(dateEntries).forEach(([dateStr, entries]) => {
             const docId = `${dateStr}_${mId}`;
             log(`    ${dateStr} ${mName}: ${entries.length} 項`);
             drCount++;
-
             if(!preview) {
               batch2.set(newFS.collection('dailyReports').doc(docId), {
                 date: dateStr,
@@ -386,14 +428,6 @@ async function doMigrate(preview) {
               });
             }
           });
-
-          // Also store promises as entries on the first day if they exist
-          const promises = rawM.promises || [];
-          if(promises.length > 0 && wdays[0]) {
-            const docId = `${wdays[0]}_${mId}_promises`;
-            // We'll add promise items to the first day's entries
-            log(`    承諾 (${promises.length} 項) 加入 ${wdays[0]}`);
-          }
         });
       });
 

@@ -291,7 +291,7 @@ const tw  = () => (END-START)/86400000*DP+32*DP;
 const fmt = d => { const dt=new Date(d); return`${dt.getMonth()+1}/${dt.getDate()}`; };
 const fmtFull = d => { const dt=new Date(d+'T00:00:00'); const dn=['日','一','二','三','四','五','六']; return`${dt.getMonth()+1}/${dt.getDate()}(${dn[dt.getDay()]})`; };
 const BH  = () => parseInt(getComputedStyle(document.documentElement).getPropertyValue('--branch-h'));
-const mem = id => MEMBERS.find(m=>m.id===id)||{name:'?',color:'#aaa'};
+const mem = id => MEMBERS.find(m=>m.id===id)||MEMBERS.find(m=>m.name===id)||{name:id||'?',color:'#aaa'};
 const branchObj = id => {
   // Check nested branches first
   const nested = TRUNKS.flatMap(t=>t.branches).find(b=>b.id===id);
@@ -317,7 +317,7 @@ function makeAv(mid, size=22, extra=''){
 }
 function addDays(dateStr,n){ const d=new Date(dateStr+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0]; }
 function getWeekStart(dateStr){ const d=new Date(dateStr+'T00:00:00');const day=d.getDay();d.setDate(d.getDate()-((day===0)?6:(day-1)));return d.toISOString().split('T')[0]; }
-function catObj(id){ return CATS.find(c=>c.id===id)||CATS[5]; }
+function catObj(id){ return CATS.find(c=>c.id===id)||CATS.find(c=>c.label===id)||CATS[5]; }
 const todayStr=TODAY.toISOString().split('T')[0];
 
 // ─────────────────────────────────────────────
@@ -1091,36 +1091,29 @@ function buildTimeline(){
   const rows=document.getElementById('rows');rows.innerHTML='';
   const filtered=activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner);
   filtered.forEach(t=>{
-    // ── Independent branch-trunk: render as a single branch row ──
+    // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
-      const brow=document.createElement('div');brow.className='brow brow-indep';brow.dataset.branch=t.id;brow.dataset.trunk=t.id;
+      const tr=document.createElement('div');tr.className='trow trow-indep';tr.dataset.trunk=t.id;tr.dataset.branch=t.id;
       const displayColor=t.color;
-      // stem
-      const st=document.createElement('div');st.className='stem';
-      st.style.cssText=`left:${dx(t.start)}px;background:${displayColor}`;brow.appendChild(st);
-      // start marker
-      const mk=document.createElement('div');mk.className='bmark';mk.style.left=dx(t.start)+'px';
-      const mkd=document.createElement('div');mkd.className='bmark-dot';mkd.style.background=displayColor;
-      const mklbl=document.createElement('div');mklbl.className='bmark-date';mklbl.textContent=fmt(t.start);
-      mk.append(mkd,mklbl);brow.appendChild(mk);
-      // bar
-      const bb=document.createElement('div');bb.className='bbar';
+      // bar (thinner, branch style)
+      const bar=document.createElement('div');bar.className='tbar tbar-indep';
       if(!t.end){
-        const w=tw()-dx(t.start);
-        bb.style.cssText=`left:${dx(t.start)}px;width:${w}px;background:${displayColor};opacity:.4;background:repeating-linear-gradient(90deg,${displayColor} 0,${displayColor} 8px,transparent 8px,transparent 14px);`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.35;height:4px;top:14px;border-radius:2px;background:repeating-linear-gradient(90deg,${displayColor} 0,${displayColor} 8px,transparent 8px,transparent 14px);`;
       } else {
-        bb.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor}`;
-        const el=document.createElement('div');el.className='endlbl';
-        el.style.left=(dx(t.end)+4)+'px';el.textContent=fmt(t.end);brow.appendChild(el);
+        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:4px;top:14px;border-radius:2px;opacity:.6;`;
       }
-      brow.appendChild(bb);
-      // Nodes: for independent branch, branch id = trunk id
-      NODES.filter(n=>n.branch===t.id).forEach(n=>addCard(n,brow));
-      spreadOverlappingCards(brow);
-      alternateCardPositions(brow);
-      brow.style.cursor='pointer';
-      brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openDetailPanel(t.id);});
-      rows.appendChild(brow);
+      tr.appendChild(bar);
+      // start dot
+      const mkd=document.createElement('div');mkd.className='bmark-dot';
+      mkd.style.cssText=`position:absolute;left:${dx(t.start)-3}px;top:11px;width:8px;height:8px;border-radius:50%;background:${displayColor};z-index:3;`;
+      tr.appendChild(mkd);
+      // Node bubbles on the trow
+      NODES.filter(n=>n.branch===t.id).forEach(n=>addCard(n,tr));
+      spreadOverlappingCards(tr);
+      alternateCardPositions(tr);
+      tr.style.cursor='pointer';
+      tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openDetailPanel(t.id);});
+      rows.appendChild(tr);
       return;
     }
 
