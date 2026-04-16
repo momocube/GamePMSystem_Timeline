@@ -41,6 +41,7 @@
 
 <button id="btn-migrate">🚀 開始遷移</button>
 <button id="btn-preview" style="background:#6b7280;color:#fff;margin:16px 0 0 8px;">👁 預覽（不寫入）</button>
+<button id="btn-fix-members" style="background:#d9730d;color:#fff;margin:16px 0 0 8px;">🔧 修復已遷移資料的成員</button>
 
 <div id="log"></div>
 
@@ -101,7 +102,11 @@ async function init() {
   log('讀取新版成員...');
   const newMemSnap = await newFS.collection('members').get();
   newMembers = newMemSnap.docs.map(d => ({id: d.id, ...d.data()}));
-  log(`  新版成員: ${newMembers.map(m=>m.name+'('+m.id+')').join(', ')}`, 'ok');
+  if(newMembers.length === 0) {
+    log('  新版尚無成員（勾選「成員同步」會自動從舊版匯入）', 'warn');
+  } else {
+    log(`  新版成員: ${newMembers.map(m=>m.name+'('+m.id+')').join(', ')}`, 'ok');
+  }
 
   // Build member mapping UI
   const mapEl = document.getElementById('member-map');
@@ -153,6 +158,67 @@ async function doMigrate(preview) {
   log(`\n${'='.repeat(40)}`);
   log(preview ? '👁 預覽模式（不會寫入任何資料）' : '🚀 開始遷移...');
   log(`${'='.repeat(40)}\n`);
+
+  // ── 0. Auto-import members from old → new ──
+  if(doMembers) {
+    log('👥 匯入舊版成員到新版...');
+    const MEMBER_COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688'];
+    // Re-read new members to get latest state
+    const freshSnap = await newFS.collection('members').get();
+    const existingNew = freshSnap.docs.map(d => ({id: d.id, ...d.data()}));
+    const existingNames = new Set(existingNew.map(m => m.name));
+
+    const memBatch = preview ? null : newFS.batch();
+    let addedCount = 0;
+
+    oldMembers.forEach((name, idx) => {
+      if(existingNames.has(name)) {
+        log(`  ${name} — 新版已存在，跳過`, 'ok');
+        // Update memberMap to use existing ID
+        const existing = existingNew.find(m => m.name === name);
+        if(existing) memberMap[name] = existing.id;
+        return;
+      }
+      // Create new member in Firestore
+      const id = name.slice(0,1).toUpperCase() + (idx > 0 ? idx : '');
+      // Check ID collision
+      let finalId = id;
+      let suffix = 1;
+      while(existingNew.find(m => m.id === finalId)) { finalId = id + suffix; suffix++; }
+
+      const memberDoc = {
+        id: finalId,
+        name: name,
+        color: MEMBER_COLORS[idx % MEMBER_COLORS.length]
+      };
+      log(`  + ${name} → ID: ${finalId}, 顏色: ${memberDoc.color}`, 'ok');
+      memberMap[name] = finalId;
+      addedCount++;
+
+      if(!preview) {
+        memBatch.set(newFS.collection('members').doc(finalId), memberDoc);
+      }
+      // Also add to newMembers so subsequent steps can use them
+      newMembers.push(memberDoc);
+    });
+
+    if(!preview && addedCount > 0) {
+      await memBatch.commit();
+      log(`  ✓ 新增 ${addedCount} 位成員`, 'ok');
+    } else if(addedCount === 0) {
+      log('  所有成員已存在，無需新增', 'ok');
+    }
+
+    // Update the mapping UI to reflect auto-matched members
+    document.querySelectorAll('.member-sel').forEach(s => {
+      const mapped = memberMap[s.dataset.oldName];
+      if(mapped) s.value = mapped;
+    });
+    log('');
+  }
+
+  // Re-read memberMap from UI (in case user adjusted)
+  memberMap = getMemberMap();
 
   // ── 1. Cards → Independent branches + Node bubbles ──
   if(doCards) {
@@ -345,6 +411,134 @@ async function doMigrate(preview) {
 
 document.getElementById('btn-migrate').addEventListener('click', () => doMigrate(false));
 document.getElementById('btn-preview').addEventListener('click', () => doMigrate(true));
+
+// Fix existing migrated data: re-import members, then update all trunks/nodes with correct member IDs
+document.getElementById('btn-fix-members').addEventListener('click', async () => {
+  log(`\n${'='.repeat(40)}`);
+  log('🔧 修復已遷移資料的成員...');
+  log(`${'='.repeat(40)}\n`);
+
+  // Step 1: Import members from old → new
+  const MEMBER_COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688'];
+  const freshSnap = await newFS.collection('members').get();
+  const existingNew = freshSnap.docs.map(d => ({id: d.id, ...d.data()}));
+  const existingNames = new Set(existingNew.map(m => m.name));
+
+  const memBatch = newFS.batch();
+  const nameToId = {};
+  // Map existing
+  existingNew.forEach(m => { nameToId[m.name] = m.id; });
+
+  let addedCount = 0;
+  oldMembers.forEach((name, idx) => {
+    if(existingNames.has(name)) {
+      log(`  ${name} — 已存在 (${nameToId[name]})`, 'ok');
+      return;
+    }
+    let finalId = name.slice(0,1).toUpperCase() + (idx > 0 ? String(idx) : '');
+    let suffix = 1;
+    while(existingNew.find(m => m.id === finalId) || Object.values(nameToId).includes(finalId)) { finalId = name.slice(0,1).toUpperCase() + suffix; suffix++; }
+
+    const memberDoc = { id: finalId, name: name, color: MEMBER_COLORS[idx % MEMBER_COLORS.length] };
+    memBatch.set(newFS.collection('members').doc(finalId), memberDoc);
+    nameToId[name] = finalId;
+    addedCount++;
+    log(`  + 新增 ${name} → ${finalId}`, 'ok');
+  });
+
+  if(addedCount > 0) {
+    await memBatch.commit();
+    log(`  ✓ 新增 ${addedCount} 位成員\n`);
+  }
+
+  // Step 2: Fix trunks — update owner, collaborators, trackers
+  log('修復枝幹的成員欄位...');
+  const trunkSnap = await newFS.collection('trunks').get();
+  const fixBatch = newFS.batch();
+  let fixCount = 0;
+
+  trunkSnap.docs.forEach(doc => {
+    const data = doc.data();
+    let changed = false;
+    const updates = {};
+
+    // Fix owner: if it's a name string instead of ID
+    if(data.owner && !existingNew.find(m => m.id === data.owner) && nameToId[data.owner]) {
+      updates.owner = nameToId[data.owner];
+      changed = true;
+    }
+    // Also check if owner is empty but we can guess from old data
+    if(data._migrated && data._oldId) {
+      // This is a migrated card — try to fix from old card data
+    }
+
+    // Fix collaborators array
+    if(Array.isArray(data.collaborators)) {
+      const fixed = data.collaborators.map(c => nameToId[c] || c);
+      if(JSON.stringify(fixed) !== JSON.stringify(data.collaborators)) { updates.collaborators = fixed; changed = true; }
+    }
+    // Fix trackers array
+    if(Array.isArray(data.trackers)) {
+      const fixed = data.trackers.map(c => nameToId[c] || c);
+      if(JSON.stringify(fixed) !== JSON.stringify(data.trackers)) { updates.trackers = fixed; changed = true; }
+    }
+
+    if(changed) {
+      fixBatch.update(doc.ref, updates);
+      fixCount++;
+      log(`  枝幹 ${data.name}: owner=${updates.owner||data.owner}`, 'ok');
+    }
+  });
+
+  // Step 3: Fix nodes — update member and collaborators
+  log('修復節點泡泡的成員欄位...');
+  const nodeSnap = await newFS.collection('nodes').get();
+  let nodeFixCount = 0;
+
+  nodeSnap.docs.forEach(doc => {
+    const data = doc.data();
+    let changed = false;
+    const updates = {};
+
+    // Fix member
+    if(data.member && !existingNew.find(m => m.id === data.member) && nameToId[data.member]) {
+      updates.member = nameToId[data.member];
+      changed = true;
+    }
+    // Fix collaborators
+    if(Array.isArray(data.collaborators)) {
+      const fixed = data.collaborators.map(c => nameToId[c] || c);
+      if(JSON.stringify(fixed) !== JSON.stringify(data.collaborators)) { updates.collaborators = fixed; changed = true; }
+    }
+
+    if(changed) {
+      fixBatch.update(doc.ref, updates);
+      nodeFixCount++;
+    }
+  });
+
+  // Step 4: Fix dailyReports — update member
+  log('修復每日代辦的成員欄位...');
+  const drSnap = await newFS.collection('dailyReports').get();
+  let drFixCount = 0;
+
+  drSnap.docs.forEach(doc => {
+    const data = doc.data();
+    if(data.member && !existingNew.find(m => m.id === data.member) && nameToId[data.member]) {
+      fixBatch.update(doc.ref, { member: nameToId[data.member] });
+      drFixCount++;
+    }
+  });
+
+  if(fixCount + nodeFixCount + drFixCount > 0) {
+    await fixBatch.commit();
+    log(`\n✓ 修復完成：${fixCount} 枝幹, ${nodeFixCount} 節點, ${drFixCount} 每日代辦`, 'ok');
+  } else {
+    log('\n所有資料的成員欄位正常，無需修復。', 'ok');
+  }
+
+  log('重新整理新版工具即可看到修復結果。\n');
+});
 
 init();
 </script>
