@@ -366,7 +366,7 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .nwrap.new{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
 
 /* ── ADD TRUNK/BRANCH BUTTON ── */
-#add-trunk-btn-wrap{padding:8px 10px;border-top:1px solid var(--border);flex-shrink:0;background:var(--surface);display:flex;gap:6px;}
+#add-trunk-btn-wrap{padding:8px 10px;flex-shrink:0;background:var(--surface);display:flex;gap:6px;position:sticky;bottom:0;z-index:5;border-top:1px solid var(--border);}
 .add-btn{flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text-mid);font-size:11px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .12s;text-align:center;}
 .add-btn:hover{background:var(--surface3);color:var(--text);}
 
