@@ -40,18 +40,18 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 #lcol{width:var(--lcol-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;z-index:20;position:relative;}
 #lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;}
 #lspc-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);letter-spacing:.06em;}
-#lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;}
-#lbody::-webkit-scrollbar{width:3px;}
-#lbody::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+#lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;scrollbar-width:none;-ms-overflow-style:none;}
+#lbody::-webkit-scrollbar{display:none;}
 #lcol-resize-handle{width:4px;height:100%;position:absolute;right:-2px;top:0;cursor:ew-resize;z-index:21;}
 #lcol-resize-handle:hover{background:var(--border);}
-#sa{flex:1;overflow-x:scroll;overflow-y:hidden;cursor:grab;position:relative;padding-bottom:2px;}
+#sa{flex:1;overflow-x:scroll;overflow-y:auto;cursor:grab;position:relative;padding-bottom:2px;}
 #sa.drag{cursor:grabbing;user-select:none;-webkit-user-select:none;}
 #sa.dragging-active *{pointer-events:none;}
-#sa::-webkit-scrollbar{height:6px;}
+#sa::-webkit-scrollbar{width:6px;height:6px;}
 #sa::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
 #sa::-webkit-scrollbar-thumb:hover{background:var(--text-dim);}
-#canvas{position:relative;height:100%;}
+#sa::-webkit-scrollbar-corner{background:transparent;}
+#canvas{position:relative;min-height:100%;}
 #ruler{height:40px;display:flex;align-items:flex-end;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:15;overflow:hidden;}
 .rc{width:var(--DAY);flex-shrink:0;text-align:center;font-family:'DM Mono',monospace;font-size:9px;color:var(--text-dim);padding-bottom:5px;position:relative;}
 .rc.ms{color:var(--text-mid);font-weight:600;}

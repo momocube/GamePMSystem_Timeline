@@ -672,6 +672,9 @@ function buildLabels(){
     }
     body.appendChild(bg);
   });
+  // Spacer to match #ruler height inside #sa for scroll sync
+  const spacer=document.createElement('div');spacer.style.cssText='height:40px;flex-shrink:0;';
+  body.appendChild(spacer);
 }
 
 // ─────────────────────────────────────────────
@@ -2536,25 +2539,26 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 // ─────────────────────────────────────────────
 (()=>{
   const sa=document.getElementById('sa');
-  let down=false,sx,sl,moved=false;
+  let down=false,sx,sy,sl,st,moved=false;
   const DRAG_THRESHOLD=5; // px before treating as drag
 
   sa.addEventListener('mousedown',e=>{
     // Don't intercept clicks on interactive elements
     if(e.target.closest('.nwrap'))return;
-    down=true;moved=false;sx=e.clientX;sl=sa.scrollLeft;
+    down=true;moved=false;sx=e.clientX;sy=e.clientY;sl=sa.scrollLeft;st=sa.scrollTop;
   });
 
   window.addEventListener('mousemove',e=>{
     if(!down)return;
-    const delta=Math.abs(e.clientX-sx);
-    if(!moved&&delta>DRAG_THRESHOLD){
+    const dx=Math.abs(e.clientX-sx),dy=Math.abs(e.clientY-sy);
+    if(!moved&&(dx>DRAG_THRESHOLD||dy>DRAG_THRESHOLD)){
       moved=true;
       sa.classList.add('drag','dragging-active');
       document.body.style.userSelect='none';
     }
     if(moved){
       sa.scrollLeft=sl-(e.clientX-sx);
+      sa.scrollTop=st-(e.clientY-sy);
     }
   });
 
@@ -2571,8 +2575,27 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
     }
   });
 
-  sa.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sl=sa.scrollLeft;},{passive:true});
-  sa.addEventListener('touchmove',e=>{sa.scrollLeft=sl-(e.touches[0].clientX-sx);},{passive:true});
+  sa.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sy=e.touches[0].clientY;sl=sa.scrollLeft;st=sa.scrollTop;},{passive:true});
+  sa.addEventListener('touchmove',e=>{sa.scrollLeft=sl-(e.touches[0].clientX-sx);sa.scrollTop=st-(e.touches[0].clientY-sy);},{passive:true});
+})();
+
+// ─────────────────────────────────────────────
+// VERTICAL SCROLL SYNC (left column ↔ timeline)
+// ─────────────────────────────────────────────
+(()=>{
+  const sa=document.getElementById('sa');
+  const lb=document.getElementById('lbody');
+  let syncing=false;
+  sa.addEventListener('scroll',()=>{
+    if(syncing)return;syncing=true;
+    lb.scrollTop=sa.scrollTop;
+    requestAnimationFrame(()=>{syncing=false;});
+  });
+  lb.addEventListener('scroll',()=>{
+    if(syncing)return;syncing=true;
+    sa.scrollTop=lb.scrollTop;
+    requestAnimationFrame(()=>{syncing=false;});
+  });
 })();
 
 // ─────────────────────────────────────────────
