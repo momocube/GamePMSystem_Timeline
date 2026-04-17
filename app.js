@@ -570,7 +570,7 @@ function buildLabels(){
         e.preventDefault();e.stopPropagation();
         showContextMenu(e,t.id,null);
       });
-      ibr.addEventListener('click',e=>{if(e.target===drag)return;openDetailPanel(t.id);});
+      ibr.addEventListener('click',e=>{if(e.target===drag)return;openBranchDetail(t.id,t.id);});
       body.appendChild(ibr);
       return; // no child bg needed
     }
@@ -628,7 +628,8 @@ function buildLabels(){
     body.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
-    if(exp[t.id]){bg.classList.add('open');}else{bg.style.height='0px';}
+    const lcAddBtnH=24;
+    if(exp[t.id]){bg.classList.add('open');bg.style.height=(t.branches.length*BH()+lcAddBtnH)+'px';}else{bg.style.height='0px';}
     t.branches.forEach((b,bidx)=>{
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
       const br=document.createElement('div');br.className='lc-br';
@@ -659,7 +660,7 @@ function buildLabels(){
         e.preventDefault();e.stopPropagation();
         showContextMenu(e,t.id,b.id);
       });
-      br.addEventListener('click',e=>{e.stopPropagation();openDetailPanel(t.id);});
+      br.addEventListener('click',e=>{e.stopPropagation();openBranchDetail(t.id,b.id);});
       bg.appendChild(br);
     });
     // Add branch button
@@ -910,9 +911,9 @@ document.getElementById('add-branch-confirm').addEventListener('click',()=>{
 function openDetailPanel(trunkId){
   const panel=document.getElementById('detail-panel');
   if(openTrunkId===trunkId&&panel.classList.contains('open')){
-    panel.classList.remove('open');openTrunkId=null;return;
+    panel.classList.remove('open');openTrunkId=null;openBranchId=null;return;
   }
-  openTrunkId=trunkId;
+  openTrunkId=trunkId;openBranchId=null;
   const t=TRUNKS.find(x=>x.id===trunkId);if(!t)return;
   document.getElementById('dp-hdr-dot').style.background=t.color;
   document.getElementById('dp-hdr-name').textContent=t.name;
@@ -1045,6 +1046,106 @@ function openDetailPanel(trunkId){
 
   panel.classList.add('open');
 }
+
+// ── Branch detail panel ──
+let openBranchId=null;
+function openBranchDetail(trunkId,branchId){
+  const panel=document.getElementById('detail-panel');
+  if(openBranchId===branchId&&panel.classList.contains('open')){
+    panel.classList.remove('open');openBranchId=null;openTrunkId=null;return;
+  }
+  openBranchId=branchId;openTrunkId=null;
+  const t=TRUNKS.find(x=>x.id===trunkId);
+  let b,isIndep=false;
+  if(t&&t.isBranch){
+    // Independent branch — stored as trunk
+    b={id:t.id,name:t.name,start:t.start,end:t.end,color:t.color,desc:t.desc||'',links:t.links||[],noEnd:!t.end};
+    isIndep=true;
+  } else if(t){
+    b=t.branches.find(x=>x.id===branchId);
+    if(!b)return;
+  } else return;
+
+  document.getElementById('dp-hdr-dot').style.background=b.color||(t?t.color:'#aaa');
+  document.getElementById('dp-hdr-name').textContent=b.name;
+  const body=document.getElementById('dp-body');body.innerHTML='';
+
+  // Dates
+  const dateSec=sec('期間設定');
+  const dateRow=document.createElement('div');dateRow.style.cssText='display:flex;gap:6px;';
+  const startInp=document.createElement('input');startInp.type='date';startInp.value=b.start||'';startInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;';
+  startInp.addEventListener('change',()=>{
+    b.start=startInp.value;
+    if(isIndep){t.start=b.start;}
+    saveTrunk(t);buildTimeline();buildLabels();
+  });
+  const endInp=document.createElement('input');endInp.type='date';endInp.value=b.end||'';endInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;';
+  endInp.addEventListener('change',()=>{
+    if(endInp.value){b.end=endInp.value;b.noEnd=false;}else{b.end=null;b.noEnd=true;}
+    if(isIndep){t.end=b.end;}
+    saveTrunk(t);buildTimeline();buildLabels();
+  });
+  const startLbl=document.createElement('div');startLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
+  startLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">開始</span>';startLbl.appendChild(startInp);
+  const endLbl=document.createElement('div');endLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
+  endLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">截止</span>';endLbl.appendChild(endInp);
+  dateRow.append(startLbl,endLbl);dateSec.appendChild(dateRow);body.appendChild(dateSec);
+
+  // Description
+  const descSec=sec('枝幹說明');
+  const descTA=document.createElement('textarea');descTA.className='dp-desc';descTA.value=b.desc||'';descTA.placeholder='枝幹說明…';
+  descTA.addEventListener('change',()=>{
+    b.desc=descTA.value;
+    if(isIndep){t.desc=b.desc;}
+    saveTrunk(t);
+  });
+  descSec.appendChild(descTA);body.appendChild(descSec);
+
+  // Links
+  const linkSec=sec('相關連結');
+  const linkList=document.createElement('div');linkList.className='dp-link-row';
+  const links=isIndep?(t.links||[]):(b.links||[]);
+  links.forEach((url,i)=>{
+    const item=document.createElement('div');item.className='dp-link-item';
+    item.innerHTML=`🔗 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${url}</span><span class="link-rm">✕</span>`;
+    item.querySelector('.link-rm').addEventListener('click',e=>{
+      e.stopPropagation();links.splice(i,1);
+      if(isIndep)t.links=links;else b.links=links;
+      saveTrunk(t);openBranchDetail(trunkId,branchId);
+    });
+    item.addEventListener('click',()=>window.open(url,'_blank'));
+    linkList.appendChild(item);
+  });
+  const addLinkRow=document.createElement('div');addLinkRow.className='dp-add-link';
+  const linkInp=document.createElement('input');linkInp.placeholder='貼上連結…';linkInp.type='text';
+  const linkBtn=document.createElement('button');linkBtn.textContent='+';
+  linkBtn.addEventListener('click',()=>{
+    const v=linkInp.value.trim();if(!v)return;
+    if(isIndep){if(!t.links)t.links=[];t.links.push(v);}
+    else{if(!b.links)b.links=[];b.links.push(v);}
+    saveTrunk(t);openBranchDetail(trunkId,branchId);
+  });
+  addLinkRow.append(linkInp,linkBtn);
+  linkSec.append(linkList,addLinkRow);body.appendChild(linkSec);
+
+  // Node stats for this branch
+  const branchNodes=NODES.filter(n=>n.branch===branchId);
+  if(branchNodes.length>0){
+    const statSec=sec('回報統計');
+    const statRow=document.createElement('div');statRow.className='dp-stat-row';
+    const updates=branchNodes.filter(n=>n.type==='update').length;
+    const milestones=branchNodes.filter(n=>n.type==='milestone').length;
+    [{n:branchNodes.length,l:'總計'},{n:updates,l:'進度'},{n:milestones,l:'里程碑'}].forEach(s=>{
+      const item=document.createElement('div');item.className='dp-stat-item';
+      item.innerHTML=`<span class="dp-stat-num">${s.n}</span><span class="dp-stat-label">${s.l}</span>`;
+      statRow.appendChild(item);
+    });
+    statSec.appendChild(statRow);body.appendChild(statSec);
+  }
+
+  panel.classList.add('open');
+}
+
 function sec(label){
   const s=document.createElement('div');s.className='dp-section';
   const l=document.createElement('div');l.className='dp-label';l.textContent=label;
@@ -1061,7 +1162,7 @@ function personChip(mid,onRemove){
   }
   return chip;
 }
-document.getElementById('dp-close').addEventListener('click',()=>{document.getElementById('detail-panel').classList.remove('open');openTrunkId=null;});
+document.getElementById('dp-close').addEventListener('click',()=>{document.getElementById('detail-panel').classList.remove('open');openTrunkId=null;openBranchId=null;});
 
 // Person picker popover
 function openPersonPop(e,callback){
@@ -1112,7 +1213,7 @@ function buildTimeline(){
       spreadOverlappingCards(tr);
       alternateCardPositions(tr);
       tr.style.cursor='pointer';
-      tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openDetailPanel(t.id);});
+      tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openBranchDetail(t.id,t.id);});
       rows.appendChild(tr);
       return;
     }
@@ -1127,7 +1228,8 @@ function buildTimeline(){
     rows.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='bgroup';bg.dataset.trunk=t.id;
-    bg.style.height=exp[t.id]?t.branches.length*BH()+'px':'0px';
+    const addBtnH=24;
+    bg.style.height=exp[t.id]?(t.branches.length*BH()+addBtnH)+'px':'0px';
     t.branches.forEach((b,bidx)=>{
       const brow=document.createElement('div');brow.className='brow';brow.dataset.branch=b.id;
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
@@ -1167,7 +1269,7 @@ function buildTimeline(){
       // Alternate visible cards up/down
       alternateCardPositions(brow);
       brow.style.cursor='pointer';
-      brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openDetailPanel(t.id);});
+      brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openBranchDetail(t.id,b.id);});
       bg.appendChild(brow);
     });
     if(exp[t.id])drawVinePaths(bg,t);
@@ -1342,12 +1444,19 @@ function toggle(id){
   const t=TRUNKS.find(x=>x.id===id);
   if(!t||t.isBranch)return; // independent branches have nothing to toggle
   exp[id]=!exp[id];const open=exp[id];
-  const h=t.branches.length*BH();
+  const brH=t.branches.length*BH();
+  const addBtnH=24; // height of the "＋ 新增枝幹" button inside lc-bg
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
+  // Left column: set explicit height including add-branch button
   const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);
-  if(lb){if(open){lb.classList.add('open');lb.style.height='';}else{lb.classList.remove('open');lb.style.height='0px';}}
-  const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);if(tb)tb.style.height=(open?h:0)+'px';
+  if(lb){
+    if(open){lb.classList.add('open');lb.style.height=(brH+addBtnH)+'px';}
+    else{lb.classList.remove('open');lb.style.height='0px';}
+  }
+  // Timeline: set explicit height matching branch rows only (no add button there, use spacer)
+  const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);
+  if(tb)tb.style.height=(open?(brH+addBtnH):0)+'px';
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
   if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());addPills(tr,t);}
 }
