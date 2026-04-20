@@ -40,26 +40,26 @@ const BASE_DP = 88;
 let DP = 88;
 
 let MEMBERS = [
-  {id:'M',name:'Momo',color:'#2eaadc'},
-  {id:'K',name:'Kai', color:'#e03e3e'},
-  {id:'L',name:'Lin', color:'#0f7b6c'},
-  {id:'R',name:'Ray', color:'#d9730d'},
-  {id:'T',name:'Taro',color:'#6940a5'},
+  {id:'M',name:'Momo',color:'#4fc3f7'},
+  {id:'K',name:'Kai', color:'#ef5350'},
+  {id:'L',name:'Lin', color:'#66bb6a'},
+  {id:'R',name:'Ray', color:'#ffb74d'},
+  {id:'T',name:'Taro',color:'#ce93d8'},
 ];
 
 const TRUNKS = [
-  {id:'game',name:'遊戲本體',color:'#2eaadc',status:'wip',priority:'normal',start:'2024-03-01',end:'2024-06-30',
+  {id:'game',name:'遊戲本體',color:'#4fc3f7',status:'wip',priority:'normal',start:'2024-03-01',end:'2024-06-30',
    owner:'M',collaborators:['K','T'],trackers:['L'],desc:'遊戲核心開發專案，包含玩法、關卡、特效等。',links:[],
    branches:[
-     {id:'core',name:'核心玩法',start:'2024-03-01',end:'2024-05-15',color:'#2eaadc',prog:62,noEnd:false},
-     {id:'lvl', name:'關卡設計',start:'2024-04-01',end:null,       color:'#2eaadc',prog:28,noEnd:true},
-     {id:'vfx', name:'視覺特效',start:'2024-04-10',end:'2024-06-10',color:'#2eaadc',prog:40,noEnd:false},
+     {id:'core',name:'核心玩法',start:'2024-03-01',end:'2024-05-15',color:'#4fc3f7',prog:62},
+     {id:'lvl', name:'關卡設計',start:'2024-04-01',end:null,       color:'#4fc3f7',prog:28},
+     {id:'vfx', name:'視覺特效',start:'2024-04-10',end:'2024-06-10',color:'#4fc3f7',prog:40},
    ]},
-  {id:'art',name:'美術 & 音效',color:'#d9730d',status:'wip',priority:'normal',start:'2024-03-10',end:'2024-06-15',
+  {id:'art',name:'美術 & 音效',color:'#ffb74d',status:'wip',priority:'normal',start:'2024-03-10',end:'2024-06-15',
    owner:'L',collaborators:['R'],trackers:['M'],desc:'美術資源與音效開發。',links:['https://figma.com/example'],
    branches:[
-     {id:'ui',   name:'UI 設計',start:'2024-03-10',end:'2024-04-30',color:'#d9730d',prog:80,noEnd:false},
-     {id:'audio',name:'音效',   start:'2024-03-20',end:null,       color:'#d9730d',prog:55,noEnd:true},
+     {id:'ui',   name:'UI 設計',start:'2024-03-10',end:'2024-04-30',color:'#ffb74d',prog:80},
+     {id:'audio',name:'音效',   start:'2024-03-20',end:null,       color:'#ffb74d',prog:55},
    ]}
 ];
 
@@ -84,24 +84,24 @@ let DAILY_REPORTS = [
 ];
 
 const CATS = [
-  {id:'dev',label:'研發',bg:'#fdecec',color:'#9b2222'},
-  {id:'design',label:'設計',bg:'#fef3e9',color:'#8a4a10'},
-  {id:'outsource',label:'外包',bg:'#e7f0fd',color:'#1a3c7a'},
-  {id:'doc',label:'文件',bg:'#edf7f0',color:'#1a5c2a'},
-  {id:'eng',label:'工務',bg:'#f4f0fd',color:'#5a3a8a'},
-  {id:'maintain',label:'維護',bg:'#fce8f0',color:'#8a1a4a'},
-  {id:'outreach',label:'外展',bg:'#e8f4ec',color:'#0f6b3a'},
-  {id:'trip',label:'出差',bg:'#e7ecfd',color:'#2a3a8a'},
-  {id:'business',label:'公出',bg:'#f0e8fd',color:'#6a2aa0'},
-  {id:'meeting',label:'會議',bg:'#f4f0fd',color:'#5a3a8a'},
-  {id:'misc',label:'雜項',bg:'#f0ede8',color:'#6b6b6a'},
-  {id:'leave',label:'請假',bg:'#fde8e8',color:'#c03030'},
+  {id:'dev',label:'研發',bg:'#3a1a1a',color:'#ef5350'},
+  {id:'design',label:'設計',bg:'#3a2810',color:'#ffb74d'},
+  {id:'outsource',label:'外包',bg:'#1a2a40',color:'#64b5f6'},
+  {id:'doc',label:'文件',bg:'#1a3020',color:'#66bb6a'},
+  {id:'eng',label:'工務',bg:'#2a1a3a',color:'#b39ddb'},
+  {id:'maintain',label:'維護',bg:'#3a1a2a',color:'#f48fb1'},
+  {id:'outreach',label:'外展',bg:'#1a3020',color:'#4db6ac'},
+  {id:'trip',label:'出差',bg:'#1a2040',color:'#7986cb'},
+  {id:'business',label:'公出',bg:'#2a1a40',color:'#ce93d8'},
+  {id:'meeting',label:'會議',bg:'#2a1a3a',color:'#b39ddb'},
+  {id:'misc',label:'雜項',bg:'#2a2a2a',color:'#9e9e9e'},
+  {id:'leave',label:'請假',bg:'#3a1a1a',color:'#ef5350'},
 ];
 
 let REPORT_TYPES = [
-  {id:'update',label:'📝 進度回報',color:'#2eaadc',bg:'#d3e5ef',border:'#a8cfe0'},
-  {id:'milestone',label:'🏁 里程碑',color:'#d9730d',bg:'#fadec9',border:'#e8b88a'},
-  {id:'trip',label:'✈️ 出差/公出',color:'#0f7b6c',bg:'#dbeddb',border:'#a3d4a3'},
+  {id:'update',label:'📝 進度回報',color:'#4fc3f7',bg:'#1a3040',border:'#2a5068'},
+  {id:'milestone',label:'🏁 里程碑',color:'#ffb74d',bg:'#3a2810',border:'#5a4020'},
+  {id:'trip',label:'✈️ 出差/公出',color:'#66bb6a',bg:'#1a3020',border:'#2a5030'},
 ];
 function reportTypeObj(id){ return REPORT_TYPES.find(r=>r.id===id)||REPORT_TYPES[0]; }
 
@@ -130,19 +130,19 @@ const TW_MAKEUP_WORKDAYS = {
 
 // Project statuses
 let PROJECT_STATUSES = [
-  {id:'todo',label:'待處理',color:'#9b9a97',bg:'#f1f1ef'},
-  {id:'wip',label:'製作中',color:'#2eaadc',bg:'#d3e5ef'},
-  {id:'testing',label:'測試中',color:'#d9730d',bg:'#fadec9'},
-  {id:'done',label:'已完成',color:'#0f7b6c',bg:'#dbeddb'},
-  {id:'hold',label:'擱置中',color:'#e03e3e',bg:'#ffe2dd'},
+  {id:'todo',label:'待處理',color:'#9e9e9e',bg:'#2a2a2a'},
+  {id:'wip',label:'製作中',color:'#4fc3f7',bg:'#1a3040'},
+  {id:'testing',label:'測試中',color:'#ffb74d',bg:'#3a2810'},
+  {id:'done',label:'已完成',color:'#66bb6a',bg:'#1a3020'},
+  {id:'hold',label:'擱置中',color:'#ef5350',bg:'#3a1a1a'},
 ];
 function statusObj(id){ return PROJECT_STATUSES.find(s=>s.id===id)||PROJECT_STATUSES[0]; }
 
 let PRIORITIES = [
-  {id:'highest',label:'最高',color:'#e03e3e',bg:'#ffe2dd'},
-  {id:'high',label:'高',color:'#d9730d',bg:'#fadec9'},
-  {id:'normal',label:'普通',color:'#2eaadc',bg:'#d3e5ef'},
-  {id:'low',label:'低',color:'#9b9a97',bg:'#f1f1ef'},
+  {id:'highest',label:'最高',color:'#ef5350',bg:'#3a1a1a'},
+  {id:'high',label:'高',color:'#ffb74d',bg:'#3a2810'},
+  {id:'normal',label:'普通',color:'#4fc3f7',bg:'#1a3040'},
+  {id:'low',label:'低',color:'#9e9e9e',bg:'#2a2a2a'},
 ];
 function priorityObj(id){ return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2]; }
 
@@ -298,10 +298,10 @@ const branchObj = id => {
   if(nested) return nested;
   // Check independent branch-trunks (isBranch:true, their trunk id IS the branch id)
   const indep = TRUNKS.find(t=>t.isBranch && t.id===id);
-  if(indep) return {id:indep.id,name:indep.name,start:indep.start,end:indep.end,color:indep.color,prog:0,noEnd:!indep.end};
+  if(indep) return {id:indep.id,name:indep.name,start:indep.start,end:indep.end,color:indep.color,prog:0};
   return undefined;
 };
-const calcDuration = b => { if(b.noEnd||!b.end) return null; return Math.round((new Date(b.end)-new Date(b.start))/86400000); };
+const calcDuration = b => { if(!b.end) return null; return Math.round((new Date(b.end)-new Date(b.start))/86400000); };
 // Find trunk id for a given branch id (handles independent branches)
 function trunkForBranch(bid){
   const indep=TRUNKS.find(t=>t.isBranch&&t.id===bid);
@@ -593,7 +593,7 @@ function buildLabels(){
         const moved=TRUNKS[dragTrunkIdx];
         if(moved&&moved.isBranch&&moved.id!==t.id){
           TRUNKS.splice(dragTrunkIdx,1);
-          const newBranch={id:moved.id,name:moved.name,start:moved.start,end:moved.end||null,color:t.color,prog:0,noEnd:!moved.end};
+          const newBranch={id:moved.id,name:moved.name,start:moved.start,end:moved.end||null,color:t.color,prog:0};
           t.branches.push(newBranch);
           saveTrunk(t);
           // Delete the old independent trunk from Firestore
@@ -913,7 +913,7 @@ document.getElementById('add-branch-confirm').addEventListener('click',()=>{
   const t=TRUNKS.find(x=>x.id===addBranchTargetTrunk);if(!t)return;
   const id='b'+Date.now().toString(36);
   // Use trunk color — deriveColor will be applied at render time
-  t.branches.push({id,name,start,end:end||null,color:t.color,prog:0,noEnd:!end});
+  t.branches.push({id,name,start,end:end||null,color:t.color,prog:0});
   saveTrunk(t);
   document.getElementById('add-branch-modal').classList.remove('open');
   if(!exp[t.id])toggle(t.id);
@@ -1006,18 +1006,10 @@ function openDetailPanel(trunkId,force){
       const name=document.createElement('span');name.style.cssText='font-size:10px;color:var(--text-mid);min-width:50px;';name.textContent=b.name;
       const bEnd=document.createElement('input');bEnd.type='date';bEnd.value=b.end||'';bEnd.style.cssText='flex:1;padding:3px 5px;font-size:10px;';
       bEnd.addEventListener('change',()=>{
-        if(bEnd.value){b.end=bEnd.value;b.noEnd=false;}else{b.end=null;b.noEnd=true;}
+        b.end=bEnd.value||null;
         saveTrunk(t);buildTimeline();buildLabels();
       });
-      const noEndCb=document.createElement('input');noEndCb.type='checkbox';noEndCb.checked=b.noEnd;noEndCb.title='無截止日';
-      noEndCb.addEventListener('change',()=>{
-        b.noEnd=noEndCb.checked;
-        if(noEndCb.checked){b.end=null;bEnd.value='';}
-        else{b.end=todayStr;bEnd.value=todayStr;}
-        saveTrunk(t);buildTimeline();buildLabels();
-      });
-      const noEndLbl=document.createElement('span');noEndLbl.style.cssText='font-size:8px;color:var(--text-dim);';noEndLbl.textContent='∞';
-      row.append(dot,name,bEnd,noEndCb,noEndLbl);brDateSec.appendChild(row);
+      row.append(dot,name,bEnd);brDateSec.appendChild(row);
     });
     body.appendChild(brDateSec);
   }
@@ -1074,7 +1066,7 @@ function openBranchDetail(trunkId,branchId,force){
   let b,isIndep=false;
   if(t&&t.isBranch){
     // Independent branch — stored as trunk
-    b={id:t.id,name:t.name,start:t.start,end:t.end,color:t.color,desc:t.desc||'',links:t.links||[],noEnd:!t.end};
+    b={id:t.id,name:t.name,start:t.start,end:t.end,color:t.color,desc:t.desc||'',links:t.links||[]};
     isIndep=true;
   } else if(t){
     b=t.branches.find(x=>x.id===branchId);
@@ -1096,7 +1088,7 @@ function openBranchDetail(trunkId,branchId,force){
   });
   const endInp=document.createElement('input');endInp.type='date';endInp.value=b.end||'';endInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;';
   endInp.addEventListener('change',()=>{
-    if(endInp.value){b.end=endInp.value;b.noEnd=false;}else{b.end=null;b.noEnd=true;}
+    b.end=endInp.value||null;
     if(isIndep){t.end=b.end;}
     saveTrunk(t);buildTimeline();buildLabels();
   });
@@ -1214,9 +1206,9 @@ function buildTimeline(){
       // bar (thinner, branch style)
       const bar=document.createElement('div');bar.className='tbar tbar-indep';
       if(!t.end){
-        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.35;height:4px;top:14px;border-radius:2px;background:repeating-linear-gradient(90deg,${displayColor} 0,${displayColor} 8px,transparent 8px,transparent 14px);`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.7;height:5px;top:14px;border-radius:2px;`;
       } else {
-        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:4px;top:14px;border-radius:2px;opacity:.6;`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:5px;top:14px;border-radius:2px;opacity:.85;`;
       }
       tr.appendChild(bar);
       // start dot
@@ -1258,13 +1250,10 @@ function buildTimeline(){
       mk.append(mkd,mklbl);brow.appendChild(mk);
       // bar
       const bb=document.createElement('div');bb.className='bbar';
-      if(b.noEnd||!b.end){
-        // open-ended bar extends to visible right
+      if(!b.end){
+        // no end date: bar extends to visible right (solid)
         const w=tw()-dx(b.start);
-        bb.style.cssText=`left:${dx(b.start)}px;width:${w}px;background:${displayColor};opacity:.4;
-          background:repeating-linear-gradient(90deg,${displayColor} 0,${displayColor} 8px,transparent 8px,transparent 14px);`;
-        const noEndLbl=document.createElement('div');noEndLbl.className='no-end-lbl';
-        noEndLbl.style.left=(dx(b.start)+8)+'px';noEndLbl.textContent='進行中…';brow.appendChild(noEndLbl);
+        bb.style.cssText=`left:${dx(b.start)}px;width:${w}px;background:${displayColor};opacity:.7;`;
       } else {
         bb.style.cssText=`left:${dx(b.start)}px;width:${dx(b.end)-dx(b.start)}px;background:${displayColor}`;
         const el=document.createElement('div');el.className='endlbl';
@@ -1273,7 +1262,7 @@ function buildTimeline(){
         const daysLeft=(new Date(b.end)-TODAY)/86400000;
         if(daysLeft>0&&daysLeft<14){
           const dw=document.createElement('div');
-          dw.style.cssText=`position:absolute;height:4px;top:16px;border-radius:0 2px 2px 0;width:14px;left:${dx(b.end)-12}px;background:repeating-linear-gradient(45deg,#e03e3e,#e03e3e 3px,transparent 3px,transparent 6px);opacity:.7`;
+          dw.style.cssText=`position:absolute;height:5px;top:16px;border-radius:0 2px 2px 0;width:14px;left:${dx(b.end)-12}px;background:var(--red);opacity:.7`;
           brow.appendChild(dw);
         }
       }
@@ -2640,22 +2629,43 @@ function render(){
 })();
 
 // ─────────────────────────────────────────────
-// INIT (with Firestore)
+// CLEAR FIRESTORE (run in console: clearFirestore())
 // ─────────────────────────────────────────────
+async function clearFirestore(){
+  if(typeof db==='undefined'){console.warn('Firestore 未連線');return;}
+  const cols=['members','trunks','nodes','dailyReports','settings'];
+  for(const col of cols){
+    const snap=await db.collection(col).get();
+    const batch=db.batch();
+    snap.docs.forEach(d=>batch.delete(d.ref));
+    await batch.commit();
+    console.log(`🗑️ 已清空 ${col}（${snap.size} 筆）`);
+  }
+  console.log('✅ Firestore 全部清空完成');
+}
+
+// ─────────────────────────────────────────────
+// USE_LOCAL: set to true to skip Firestore, use in-code test data
+// ─────────────────────────────────────────────
+const USE_LOCAL = true;
+
 (async function init(){
-  try {
-    const loaded = await loadFromFirestore();
-    if (loaded) {
-      // Re-init expansion state for loaded trunks
-      TRUNKS.forEach(t => { if (!(t.id in exp)) exp[t.id] = false; });
-      console.log('✅ 已從 Firestore 載入資料');
-    } else {
-      console.log('ℹ️ Firestore 尚無資料，使用預設資料。在 Console 執行 migrateToFirestore() 可匯入。');
+  if(!USE_LOCAL){
+    try {
+      const loaded = await loadFromFirestore();
+      if (loaded) {
+        TRUNKS.forEach(t => { if (!(t.id in exp)) exp[t.id] = false; });
+        console.log('✅ 已從 Firestore 載入資料');
+      } else {
+        console.log('ℹ️ Firestore 尚無資料，使用預設資料。');
+      }
+      _firestoreReady = true;
+      startRealtimeSync();
+    } catch (e) {
+      console.warn('Firebase 初始化失敗，使用離線模式：', e);
     }
-    _firestoreReady = true;
-    startRealtimeSync();
-  } catch (e) {
-    console.warn('Firebase 初始化失敗，使用離線模式：', e);
+  } else {
+    console.log('🧪 本地測試模式：使用內建假資料，不連線 Firestore');
   }
   render();
 })();
