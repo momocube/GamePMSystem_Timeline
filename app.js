@@ -2113,6 +2113,19 @@ document.getElementById('subbt').addEventListener('click',()=>{
   const title=(document.getElementById('rp-title')?.value||'').trim();
   const desc=document.getElementById('rmsg').value.trim();
 
+  // If link name filled but no URL, warn and don't submit
+  const _rpLinkName=document.getElementById('rp-link-name').value.trim();
+  const _rpLinkUrl=document.getElementById('rp-link-url').value.trim();
+  if(_rpLinkName&&!_rpLinkUrl){
+    const el=document.getElementById('rp-link-url');
+    el.style.borderColor='#c97b7b';el.placeholder='⚠ 請填寫網址';setTimeout(()=>{el.style.borderColor='';el.placeholder='貼上網址…';},1200);return;
+  }
+  // Auto-add if URL is filled but user forgot to press +
+  if(_rpLinkUrl){
+    pendLinks.push({name:_rpLinkName,url:_rpLinkUrl});
+    document.getElementById('rp-link-url').value='';document.getElementById('rp-link-name').value='';
+    renderPendLinks();
+  }
   if(!title&&!desc){
     const el=document.getElementById('rp-title')||document.getElementById('rmsg');
     el.style.borderColor='#c97b7b';setTimeout(()=>el.style.borderColor='',800);return;
