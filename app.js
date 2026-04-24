@@ -378,7 +378,7 @@ document.getElementById('scale-sel').addEventListener('change',function(){
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildTimeline();
   sa.scrollLeft=oldCenter*DP-sa.clientWidth*0.35;
-  document.getElementById('tdline').style.left=Math.round(dx(todayStr)+DP/2-1.5)+'px';
+  document.getElementById('tdline').style.left=Math.round(dx(todayStr)+DP/2-1)+'px';
 });
 
 document.getElementById('btn-today').addEventListener('click',()=>{
@@ -2602,7 +2602,7 @@ function render(){
   recalcTimeRange();
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildHeaderAvatars();buildOwnerFilter();buildLabels();buildTimeline();buildSelects();buildDailySelects();renderDailyEntries();updateHeaderRange();
-  document.getElementById('tdline').style.left=Math.round(dx(todayStr)+DP/2-1.5)+'px';
+  document.getElementById('tdline').style.left=Math.round(dx(todayStr)+DP/2-1)+'px';
   const sa=document.getElementById('sa');
   sa.scrollLeft=dx(todayStr)-sa.clientWidth*.35;
   // default hide weekly
