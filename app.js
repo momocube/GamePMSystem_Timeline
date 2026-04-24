@@ -1202,9 +1202,9 @@ function buildTimeline(){
       // bar (thinner, branch style)
       const bar=document.createElement('div');bar.className='tbar tbar-indep';
       if(!t.end){
-        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.7;height:8px;top:12px;border-radius:4px;`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.7;height:8px;top:12px;border-radius:4px`;
       } else {
-        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:8px;top:12px;border-radius:4px;opacity:.9;`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:8px;top:12px;border-radius:4px;opacity:.9`;
       }
       tr.appendChild(bar);
       // start dot
@@ -1258,7 +1258,7 @@ function buildTimeline(){
         const daysLeft=(new Date(b.end)-TODAY)/86400000;
         if(daysLeft>0&&daysLeft<14){
           const dw=document.createElement('div');
-          dw.style.cssText=`position:absolute;height:5px;top:16px;border-radius:0 2px 2px 0;width:14px;left:${dx(b.end)-12}px;background:var(--red);opacity:.7`;
+          dw.style.cssText=`position:absolute;height:8px;top:20px;border-radius:0 4px 4px 0;width:14px;left:${dx(b.end)-12}px;background:var(--red);opacity:.7`;
           brow.appendChild(dw);
         }
       }
@@ -1432,7 +1432,7 @@ function alternateCardPositions(brow){
   visible.sort((a,b)=>parseFloat(a.style.left)-parseFloat(b.style.left));
   visible.forEach((c,i)=>{
     if(i%2===1){
-      c.style.top='28px'; // below the bar line
+      c.style.top='26px'; // below the bar line
     }
   });
 }
