@@ -78,8 +78,12 @@
         <div id="iuparea" onclick="document.getElementById('ifinput').click()">📎 上傳圖片（可多選）</div>
         <input type="file" id="ifinput" accept="image/*" multiple style="display:none">
         <div id="ipreviews"></div>
-        <div id="link-attach-area" style="display:flex;gap:4px;align-items:center;">
-          <input type="text" id="rp-link-input" placeholder="📎 貼上附件連結…" style="flex:1;padding:4px 7px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
+        <div id="link-attach-area" style="display:flex;flex-direction:column;gap:3px;">
+          <input type="text" id="rp-link-name" placeholder="📎 連結名稱（選填）" style="flex:1;padding:4px 7px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
+          <div style="display:flex;gap:4px;">
+            <input type="text" id="rp-link-url" placeholder="貼上網址…" style="flex:1;padding:4px 7px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;">
+            <button id="rp-link-add" style="padding:3px 8px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;">＋</button>
+          </div>
         </div>
         <div id="rp-link-previews" style="display:flex;flex-direction:column;gap:2px;"></div>
       </div>

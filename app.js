@@ -144,7 +144,7 @@ function priorityObj(id){ return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2]; }
 
 let NC=100, DRC=100;
 const exp={};TRUNKS.forEach(t=>exp[t.id]=false);
-let activeType='all',activeMems=new Set(),activeOwner='all',pendImgs=[],editImgs=[];
+let activeType='all',activeMems=new Set(),activeOwner='all',pendImgs=[],editImgs=[],pendLinks=[],editNodeLinks=[];
 let currentNodeId=null,slIdx=0,slImgs=[];
 let progTarget=null;
 let openTrunkId=null; // for detail panel
@@ -1030,21 +1030,10 @@ function openDetailPanel(trunkId,force){
   descSec.appendChild(descTA);body.appendChild(descSec);
 
   // Links
-  const linkSec=sec('附件連結');
-  const linkList=document.createElement('div');linkList.className='dp-link-row';
-  (t.links||[]).forEach((url,i)=>{
-    const item=document.createElement('div');item.className='dp-link-item';
-    item.innerHTML=`🔗 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${url}</span><span class="link-rm">✕</span>`;
-    item.querySelector('.link-rm').addEventListener('click',e=>{e.stopPropagation();t.links.splice(i,1);saveTrunk(t);openDetailPanel(trunkId,true);});
-    item.addEventListener('click',()=>window.open(url,'_blank'));
-    linkList.appendChild(item);
-  });
-  const addLinkRow=document.createElement('div');addLinkRow.className='dp-add-link';
-  const linkInp=document.createElement('input');linkInp.placeholder='貼上連結…';linkInp.type='text';
-  const linkBtn=document.createElement('button');linkBtn.textContent='+';
-  linkBtn.addEventListener('click',()=>{const v=linkInp.value.trim();if(v){if(!t.links)t.links=[];t.links.push(v);saveTrunk(t);openDetailPanel(trunkId,true);}});
-  addLinkRow.append(linkInp,linkBtn);
-  linkSec.append(linkList,addLinkRow);body.appendChild(linkSec);
+  body.appendChild(buildLinkSection('附件連結',t.links||[],
+    lk=>{if(!t.links)t.links=[];t.links.push(lk);saveTrunk(t);openDetailPanel(trunkId,true);},
+    i=>{t.links.splice(i,1);saveTrunk(t);openDetailPanel(trunkId,true);}
+  ));
 
   // Stats
   const statSec=sec('節點回報統計');
@@ -1118,31 +1107,15 @@ function openBranchDetail(trunkId,branchId,force){
   descSec.appendChild(descTA);body.appendChild(descSec);
 
   // Links
-  const linkSec=sec('相關連結');
-  const linkList=document.createElement('div');linkList.className='dp-link-row';
-  const links=isIndep?(t.links||[]):(b.links||[]);
-  links.forEach((url,i)=>{
-    const item=document.createElement('div');item.className='dp-link-item';
-    item.innerHTML=`🔗 <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${url}</span><span class="link-rm">✕</span>`;
-    item.querySelector('.link-rm').addEventListener('click',e=>{
-      e.stopPropagation();links.splice(i,1);
-      if(isIndep)t.links=links;else b.links=links;
+  const bLinks=isIndep?(t.links||[]):(b.links||[]);
+  body.appendChild(buildLinkSection('相關連結',bLinks,
+    lk=>{
+      if(isIndep){if(!t.links)t.links=[];t.links.push(lk);}
+      else{if(!b.links)b.links=[];b.links.push(lk);}
       saveTrunk(t);openBranchDetail(trunkId,branchId,true);
-    });
-    item.addEventListener('click',()=>window.open(url,'_blank'));
-    linkList.appendChild(item);
-  });
-  const addLinkRow=document.createElement('div');addLinkRow.className='dp-add-link';
-  const linkInp=document.createElement('input');linkInp.placeholder='貼上連結…';linkInp.type='text';
-  const linkBtn=document.createElement('button');linkBtn.textContent='+';
-  linkBtn.addEventListener('click',()=>{
-    const v=linkInp.value.trim();if(!v)return;
-    if(isIndep){if(!t.links)t.links=[];t.links.push(v);}
-    else{if(!b.links)b.links=[];b.links.push(v);}
-    saveTrunk(t);openBranchDetail(trunkId,branchId,true);
-  });
-  addLinkRow.append(linkInp,linkBtn);
-  linkSec.append(linkList,addLinkRow);body.appendChild(linkSec);
+    },
+    i=>{bLinks.splice(i,1);if(isIndep)t.links=bLinks;else b.links=bLinks;saveTrunk(t);openBranchDetail(trunkId,branchId,true);}
+  ));
 
   // Node stats for this branch
   const branchNodes=NODES.filter(n=>n.branch===branchId);
@@ -1160,6 +1133,44 @@ function openBranchDetail(trunkId,branchId,force){
   }
 
   panel.classList.add('open');
+}
+
+// Normalize link: old format (string) → {name, url}
+function normLink(l){
+  if(typeof l==='string') return {name:'',url:l};
+  return {name:l.name||'',url:l.url||''};
+}
+function normLinks(arr){ return (arr||[]).map(normLink); }
+
+// Build a reusable link section for detail panels
+function buildLinkSection(label,linksArr,onAdd,onRemove,onRefresh){
+  const linkSec=sec(label);
+  const linkList=document.createElement('div');linkList.className='dp-link-row';
+  const norms=normLinks(linksArr);
+  norms.forEach((lk,i)=>{
+    const item=document.createElement('div');item.className='dp-link-item';
+    const a=document.createElement('a');a.href=lk.url;a.target='_blank';a.rel='noopener';
+    a.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);text-decoration:none;font-size:11px;';
+    a.textContent=lk.name||lk.url;a.title=lk.url;
+    const rm=document.createElement('span');rm.className='link-rm';rm.textContent='✕';
+    rm.addEventListener('click',e=>{e.stopPropagation();e.preventDefault();onRemove(i);});
+    item.append(a,rm);
+    item.addEventListener('click',e=>{if(e.target===item)window.open(lk.url,'_blank');});
+    linkList.appendChild(item);
+  });
+  const addLinkRow=document.createElement('div');addLinkRow.className='dp-add-link';addLinkRow.style.flexDirection='column';addLinkRow.style.gap='3px';
+  const nameInp=document.createElement('input');nameInp.placeholder='連結名稱（選填）';nameInp.type='text';nameInp.style.fontSize='11px';
+  const urlInp=document.createElement('input');urlInp.placeholder='貼上網址…';urlInp.type='text';urlInp.style.fontSize='11px';
+  const btnRow=document.createElement('div');btnRow.style.cssText='display:flex;gap:4px;';
+  const linkBtn=document.createElement('button');linkBtn.textContent='＋ 新增連結';linkBtn.style.flex='1';
+  linkBtn.addEventListener('click',()=>{
+    const url=urlInp.value.trim();if(!url)return;
+    onAdd({name:nameInp.value.trim(),url});
+  });
+  btnRow.appendChild(linkBtn);
+  addLinkRow.append(nameInp,urlInp,btnRow);
+  linkSec.append(linkList,addLinkRow);
+  return linkSec;
 }
 
 function sec(label){
@@ -1369,7 +1380,17 @@ function addCard(n,brow){
     const locMatch=n.msg.match(/📍 地點：([^\n]*)/);
     if(locMatch)displayMsg='📍 '+locMatch[1];
   }
-  card.innerHTML=`<div class="ncwho" style="color:${tc.accent}">${icon} <span class="ncdate">${fmt(n.date)}</span></div><div class="ncmsg">${displayMsg}</div>${collabH}${imgH}`;
+  let linkH='';
+  const nLinks=normLinks(n.links);
+  if(nLinks.length>0){
+    linkH='<div style="display:flex;flex-direction:column;gap:1px;margin-top:3px;">';
+    nLinks.slice(0,2).forEach(lk=>{
+      linkH+=`<div style="font-size:8px;color:var(--blue);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🔗 ${lk.name||lk.url}</div>`;
+    });
+    if(nLinks.length>2)linkH+=`<div style="font-size:8px;color:var(--text-dim);">+${nLinks.length-2} 連結</div>`;
+    linkH+='</div>';
+  }
+  card.innerHTML=`<div class="ncwho" style="color:${tc.accent}">${icon} <span class="ncdate">${fmt(n.date)}</span></div><div class="ncmsg">${displayMsg}</div>${collabH}${linkH}${imgH}`;
   w.append(avDot,card);
   w.addEventListener('click',()=>openNodeModal(n.id));
   brow.appendChild(w);return w;
@@ -1523,13 +1544,28 @@ function openNodeModal(id){
   // meeting attendees removed
   // links
   const linksArea=document.getElementById('nmod-links');linksArea.innerHTML='';
-  if(n.links&&n.links.length>0){
-    n.links.forEach(url=>{
-      const item=document.createElement('div');item.className='dp-link-item';
-      item.innerHTML=`🔗 <a href="${url}" target="_blank" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);text-decoration:none;">${url}</a>`;
-      linksArea.appendChild(item);
+  editNodeLinks=normLinks(n.links||[]);
+  function renderNodeLinks(){
+    linksArea.innerHTML='';
+    editNodeLinks.forEach((lk,i)=>{
+      const item=document.createElement('div');item.className='dp-link-item';item.style.fontSize='11px';
+      const a=document.createElement('a');a.href=lk.url;a.target='_blank';a.rel='noopener';
+      a.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);text-decoration:none;';
+      a.textContent=lk.name||lk.url;a.title=lk.url;
+      const rm=document.createElement('span');rm.className='link-rm';rm.textContent='✕';
+      rm.addEventListener('click',e=>{e.stopPropagation();editNodeLinks.splice(i,1);renderNodeLinks();});
+      item.append(a,rm);linksArea.appendChild(item);
     });
+    // add row
+    const addRow=document.createElement('div');addRow.style.cssText='display:flex;flex-direction:column;gap:2px;margin-top:4px;';
+    const nameI=document.createElement('input');nameI.type='text';nameI.placeholder='連結名稱（選填）';nameI.style.cssText='padding:3px 6px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;';
+    const urlRow=document.createElement('div');urlRow.style.cssText='display:flex;gap:4px;';
+    const urlI=document.createElement('input');urlI.type='text';urlI.placeholder='貼上網址…';urlI.style.cssText='flex:1;padding:3px 6px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;';
+    const addBtn=document.createElement('button');addBtn.textContent='＋';addBtn.style.cssText='padding:3px 8px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;';
+    addBtn.addEventListener('click',()=>{const u=urlI.value.trim();if(!u)return;editNodeLinks.push({name:nameI.value.trim(),url:u});renderNodeLinks();});
+    urlRow.append(urlI,addBtn);addRow.append(nameI,urlRow);linksArea.appendChild(addRow);
   }
+  renderNodeLinks();
   // images
   slImgs=[...editImgs];slIdx=0;updSlide();renderEditPrev();
   document.getElementById('nmodal').classList.add('open');
@@ -1562,6 +1598,7 @@ document.getElementById('nmod-save').addEventListener('click',()=>{
   n.msg=document.getElementById('nmod-msg-edit').value.trim();
   n.notes=document.getElementById('nmod-notes-edit')?.value?.trim()||'';
   n.images=[...editImgs];
+  n.links=[...editNodeLinks];
   saveNode(n);
   // re-render that card
   const oldCard=document.querySelector(`.nwrap[data-id="${n.id}"]`);
@@ -2050,6 +2087,25 @@ function renderPendPrev(){
     wrap.append(img,rm);c.appendChild(wrap);
   });
 }
+function renderPendLinks(){
+  const c=document.getElementById('rp-link-previews');c.innerHTML='';
+  pendLinks.forEach((lk,i)=>{
+    const item=document.createElement('div');item.className='dp-link-item';item.style.fontSize='10px';
+    const a=document.createElement('a');a.href=lk.url;a.target='_blank';a.rel='noopener';
+    a.style.cssText='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--blue);text-decoration:none;';
+    a.textContent=lk.name||lk.url;a.title=lk.url;
+    const rm=document.createElement('span');rm.className='link-rm';rm.textContent='✕';
+    rm.addEventListener('click',e=>{e.stopPropagation();pendLinks.splice(i,1);renderPendLinks();});
+    item.append(a,rm);c.appendChild(item);
+  });
+}
+document.getElementById('rp-link-add').addEventListener('click',()=>{
+  const url=document.getElementById('rp-link-url').value.trim();if(!url)return;
+  const name=document.getElementById('rp-link-name').value.trim();
+  pendLinks.push({name,url});
+  document.getElementById('rp-link-url').value='';document.getElementById('rp-link-name').value='';
+  renderPendLinks();
+});
 document.getElementById('rprep').addEventListener('change',buildCollabPicks);
 document.getElementById('subbt').addEventListener('click',()=>{
   const bid=document.getElementById('rpbr').value,mk=document.getElementById('rprep').value;
@@ -2067,15 +2123,14 @@ document.getElementById('subbt').addEventListener('click',()=>{
 
   const dateStr=di||todayStr;
   let tid=trunkForBranch(bid);
-  const linkVal=document.getElementById('rp-link-input').value.trim();
-  const nodeLinks=linkVal?[linkVal]:[];
+  const nodeLinks=[...pendLinks];
   const nn={id:++NC,trunk:tid,branch:bid,type:'update',date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
-  NODES.push(nn);saveNode(nn);pendImgs=[];renderPendPrev();
+  NODES.push(nn);saveNode(nn);pendImgs=[];pendLinks=[];renderPendPrev();renderPendLinks();
   if(!exp[tid]){exp[tid]=true;}
   buildLabels();buildTimeline();
   if(document.getElementById('rp-title'))document.getElementById('rp-title').value='';
   document.getElementById('rmsg').value='';
-  document.getElementById('rp-link-input').value='';
+  document.getElementById('rp-link-url').value='';document.getElementById('rp-link-name').value='';
   const sb=document.getElementById('subbt');sb.style.background='#6aaa82';sb.textContent='✓';
   setTimeout(()=>{sb.style.background='var(--text)';sb.textContent='↑';},800);
   if(openTrunkId===tid)openDetailPanel(tid);
