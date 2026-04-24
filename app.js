@@ -378,7 +378,7 @@ document.getElementById('scale-sel').addEventListener('change',function(){
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildTimeline();
   sa.scrollLeft=oldCenter*DP-sa.clientWidth*0.35;
-  document.getElementById('tdline').style.left=(dx(todayStr)+DP/2)+'px';
+  alignTodayLine();
 });
 
 document.getElementById('btn-today').addEventListener('click',()=>{
@@ -2611,11 +2611,22 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 // ─────────────────────────────────────────────
 // RENDER
 // ─────────────────────────────────────────────
+function alignTodayLine(){
+  const tdCell=document.querySelector('.rc.td');
+  const canvas=document.getElementById('canvas');
+  if(tdCell&&canvas){
+    const cellRect=tdCell.getBoundingClientRect();
+    const canvasRect=canvas.getBoundingClientRect();
+    document.getElementById('tdline').style.left=(cellRect.left-canvasRect.left+cellRect.width/2)+'px';
+  } else {
+    document.getElementById('tdline').style.left=(dx(todayStr)+DP/2)+'px';
+  }
+}
 function render(){
   recalcTimeRange();
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildHeaderAvatars();buildOwnerFilter();buildLabels();buildTimeline();buildSelects();buildDailySelects();renderDailyEntries();updateHeaderRange();
-  document.getElementById('tdline').style.left=(dx(todayStr)+DP/2)+'px';
+  alignTodayLine();
   const sa=document.getElementById('sa');
   sa.scrollLeft=dx(todayStr)-sa.clientWidth*.35;
   // default hide weekly
