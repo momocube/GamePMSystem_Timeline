@@ -60,7 +60,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .rc.holiday{background:var(--notion-red);}
 .rc-holiday-label{position:absolute;top:-9px;left:50%;transform:translateX(-50%);font-size:5px;color:var(--red);white-space:nowrap;pointer-events:none;font-family:'Noto Sans TC',sans-serif;font-weight:500;letter-spacing:0;line-height:1;}
 .rc.weekend{color:#c4a0a0;}
-#tdline{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);opacity:.7;pointer-events:none;z-index:10;}
+#tdline{position:absolute;top:0;bottom:0;width:2px;background:var(--accent);opacity:.7;pointer-events:none;z-index:10;transform:translateX(-50%);}
 #rows{position:absolute;top:40px;left:0;right:0;bottom:0;display:flex;flex-direction:column;}
 
 /* ── TRUNK ROW ── */
