@@ -644,7 +644,20 @@ function buildLabels(){
       const top=document.createElement('div');top.className='lc-brtop';
       const bd=document.createElement('div');bd.className='lc-brdot';bd.style.background=displayColor;
       const bn=document.createElement('div');bn.className='lc-brname';bn.textContent=b.name;
-      top.append(bd,bn);br.appendChild(top);
+      // status chip (branch-level, fallback to trunk status)
+      const bStatus=b.status||t.status||'todo';
+      const stObj=statusObj(bStatus);
+      const stChip=document.createElement('div');stChip.className='lc-br-status';
+      stChip.style.cssText=`background:${stObj.bg};color:${stObj.color};`;
+      stChip.textContent=stObj.label;
+      stChip.addEventListener('click',e=>{
+        e.stopPropagation();
+        const curIdx=PROJECT_STATUSES.findIndex(s=>s.id===bStatus);
+        const nextIdx=(curIdx+1)%PROJECT_STATUSES.length;
+        b.status=PROJECT_STATUSES[nextIdx].id;
+        saveTrunk(t);buildLabels();
+      });
+      top.append(bd,bn,stChip);br.appendChild(top);
       // duration
       const dur=calcDuration(b);
       const durEl=document.createElement('div');durEl.className='lc-duration';

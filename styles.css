@@ -125,6 +125,8 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .lc-brtop{display:flex;align-items:center;gap:5px;margin-bottom:1px;}
 .lc-brdot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
 .lc-brname{font-size:12px;color:var(--text-mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.lc-br-status{padding:1px 6px;border-radius:8px;font-size:8px;font-weight:600;white-space:nowrap;flex-shrink:0;cursor:pointer;transition:opacity .12s;margin-left:auto;}
+.lc-br-status:hover{opacity:.75;}
 .lc-duration{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);margin-bottom:0;}
 .lc-prog-row{display:flex;align-items:center;gap:5px;}
 .lc-pbar{flex:1;height:4px;border-radius:2px;background:var(--border);overflow:visible;cursor:pointer;position:relative;}
