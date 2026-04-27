@@ -31,6 +31,8 @@
   <label><input type="checkbox" id="chk-cards" checked> 卡片 → 獨立枝幹 + 留言泡泡</label>
   <label style="margin-top:6px;"><input type="checkbox" id="chk-weekly" checked> 週進度 → 每日代辦 (dailyReports)</label>
   <label style="margin-top:6px;"><input type="checkbox" id="chk-members" checked> 成員同步</label>
+  <label style="margin-top:6px;"><input type="checkbox" id="chk-statuses" checked> 狀態設定 (statuses)</label>
+  <label style="margin-top:6px;"><input type="checkbox" id="chk-tags" checked> 組別標籤 (tags + tagColors)</label>
 </div>
 
 <div class="section">
@@ -42,6 +44,33 @@
 <button id="btn-migrate">🚀 開始遷移</button>
 <button id="btn-preview" style="background:#6b7280;color:#fff;margin:16px 0 0 8px;">👁 預覽（不寫入）</button>
 <button id="btn-fix-members" style="background:#d32f2f;color:#fff;margin:16px 0 0 8px;">🗑️ 清除已遷移資料</button>
+
+<div class="section" style="margin-top:20px;border:2px solid #d32f2f;background:#fff5f5;">
+  <h3 style="font-size:14px;margin-bottom:6px;color:#d32f2f;">⚠️ 危險區域</h3>
+  <p style="font-size:11px;color:#9b9a97;margin-bottom:10px;">以下操作會永久刪除資料，請確認後再執行。</p>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button id="btn-nuke-new" style="background:#d32f2f;color:#fff;font-size:12px;">💥 清空新版所有資料</button>
+    <button id="btn-nuke-old" style="background:#922b21;color:#fff;font-size:12px;">💥 清空舊版所有資料</button>
+    <button id="btn-nuke-both" style="background:#1a1a2e;color:#fff;font-size:12px;">💥 清空新版 + 舊版所有資料</button>
+  </div>
+</div>
+
+<div class="section" style="border:2px solid #2eaadc;background:#f0f9ff;">
+  <h3 style="font-size:14px;margin-bottom:6px;color:#1a5276;">🚑 搶救成員資料</h3>
+  <p style="font-size:11px;color:#9b9a97;margin-bottom:8px;">從卡片、週進度中掃描所有出現過的成員名稱，重新寫回舊版 members。</p>
+  <button id="btn-recover-members" style="background:#2eaadc;color:#fff;font-size:13px;font-weight:600;">🔍 掃描並恢復成員</button>
+  <div id="recover-preview" style="margin-top:8px;"></div>
+</div>
+
+<div class="section" id="member-cleanup-section" style="display:none;">
+  <h3 style="font-size:14px;margin-bottom:10px;">🧹 成員清理</h3>
+  <p style="font-size:11px;color:#9b9a97;margin-bottom:8px;">勾選要刪除的亂碼或重複成員（會同時清除舊版 + 新版）：</p>
+  <div id="member-cleanup-list"></div>
+  <div style="margin-top:10px;">
+    <button id="btn-delete-selected" style="background:#d32f2f;color:#fff;font-size:12px;">🗑️ 刪除勾選的成員</button>
+    <button id="btn-select-garbled" style="background:#6b7280;color:#fff;font-size:12px;margin-left:6px;">自動勾選亂碼</button>
+  </div>
+</div>
 
 <div id="log"></div>
 
@@ -136,7 +165,156 @@ async function init() {
     mapEl.appendChild(row);
   });
   log('初始化完成，可以開始遷移。\n');
+
+  // Build member cleanup UI
+  buildMemberCleanup();
 }
+
+// Detect garbled names: contains non-printable, mojibake patterns, or random-looking strings
+function isGarbled(name) {
+  if(!name || name.length === 0) return true;
+  // Contains control chars or replacement char
+  if(/[\x00-\x08\x0E-\x1F�]/.test(name)) return true;
+  // Very short random-looking IDs (like "A1", "B2") that aren't real names
+  if(/^[A-Z]\d+$/.test(name) && name.length <= 3) return false; // these are valid member IDs
+  // Contains sequences typical of mojibake (latin chars mixed with fragments)
+  if(/[À-ÿ]{3,}/.test(name)) return true;
+  // Contains null bytes or weird unicode
+  if(/[\uD800-\uDFFF]/.test(name)) return true;
+  // Random hex-like strings
+  if(/^[0-9a-f]{6,}$/i.test(name)) return true;
+  return false;
+}
+
+function buildMemberCleanup() {
+  const section = document.getElementById('member-cleanup-section');
+  const list = document.getElementById('member-cleanup-list');
+  // Combine all members from both systems
+  const allOld = oldMembers.map(n => ({name: n, source: '舊版'}));
+  const allNew = newMembers.map(m => ({name: m.name, id: m.id, source: '新版'}));
+  const combined = [];
+  // Dedup: show each unique name once, mark which system(s) it's in
+  const seen = new Set();
+  allOld.forEach(m => {
+    if(!seen.has(m.name)) { seen.add(m.name); combined.push({name: m.name, inOld: true, inNew: false, newId: null}); }
+  });
+  allNew.forEach(m => {
+    const existing = combined.find(c => c.name === m.name);
+    if(existing) { existing.inNew = true; existing.newId = m.id; }
+    else { combined.push({name: m.name, inOld: false, inNew: true, newId: m.id}); }
+  });
+
+  if(combined.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  list.innerHTML = '';
+
+  combined.forEach((m, i) => {
+    const garbled = isGarbled(m.name);
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid #f0f0f0;font-size:12px;';
+    if(garbled) row.style.background = '#fff3f3';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.className = 'member-del-cb'; cb.dataset.name = m.name;
+    cb.dataset.inOld = m.inOld; cb.dataset.inNew = m.inNew; cb.dataset.newId = m.newId || '';
+    if(garbled) cb.checked = true;
+    const badge = m.inOld && m.inNew ? '舊+新' : m.inOld ? '僅舊版' : '僅新版';
+    const badgeColor = m.inOld && m.inNew ? '#2eaadc' : m.inOld ? '#9b9a97' : '#0f7b6c';
+    row.innerHTML = '';
+    row.appendChild(cb);
+    const span = document.createElement('span');
+    span.style.flex = '1';
+    span.textContent = m.name || '(空白)';
+    if(garbled) { span.style.color = '#e03e3e'; span.style.fontWeight = '600'; }
+    row.appendChild(span);
+    const bdg = document.createElement('span');
+    bdg.textContent = badge;
+    bdg.style.cssText = `font-size:10px;padding:1px 6px;border-radius:4px;color:#fff;background:${badgeColor};`;
+    row.appendChild(bdg);
+    if(m.newId) {
+      const idSpan = document.createElement('span');
+      idSpan.textContent = `ID: ${m.newId}`;
+      idSpan.style.cssText = 'font-size:10px;color:#9b9a97;';
+      row.appendChild(idSpan);
+    }
+    list.appendChild(row);
+  });
+}
+
+// Auto-select garbled names
+document.getElementById('btn-select-garbled').addEventListener('click', () => {
+  document.querySelectorAll('.member-del-cb').forEach(cb => {
+    cb.checked = isGarbled(cb.dataset.name);
+  });
+  log('已自動勾選疑似亂碼的成員', 'ok');
+});
+
+// Delete selected members
+document.getElementById('btn-delete-selected').addEventListener('click', async () => {
+  const toDelete = [];
+  document.querySelectorAll('.member-del-cb:checked').forEach(cb => {
+    toDelete.push({name: cb.dataset.name, inOld: cb.dataset.inOld === 'true', inNew: cb.dataset.inNew === 'true', newId: cb.dataset.newId});
+  });
+  if(toDelete.length === 0) { log('未勾選任何成員', 'warn'); return; }
+  if(!confirm(`確定要刪除 ${toDelete.length} 位成員嗎？\n${toDelete.map(m=>m.name||'(空白)').join(', ')}`)) return;
+
+  log(`\n${'='.repeat(40)}`);
+  log(`🧹 刪除 ${toDelete.length} 位成員...`);
+
+  for(const m of toDelete) {
+    // Delete from old (Realtime DB) — members is an array, need to rewrite
+    if(m.inOld) {
+      oldMembers = oldMembers.filter(n => n !== m.name);
+    }
+    // Delete from new (Firestore)
+    if(m.inNew && m.newId) {
+      await newFS.collection('members').doc(m.newId).delete();
+      log(`  新版刪除: ${m.name} (${m.newId})`, 'ok');
+    }
+  }
+  // Rewrite old members array
+  await oldDB.ref('members').set(oldMembers);
+  log(`  舊版成員已更新: ${oldMembers.join(', ')}`, 'ok');
+
+  // Also clean up cards that reference deleted members
+  log('  清理引用已刪成員的卡片資料...');
+  const deletedNames = new Set(toDelete.map(m => m.name));
+  const cardsSnap = await oldDB.ref('tree_cards').once('value');
+  const cards = cardsSnap.val() || {};
+  let fixCount = 0;
+  for(const [cid, card] of Object.entries(cards)) {
+    let changed = false;
+    if(deletedNames.has(card.assignee)) { card.assignee = ''; changed = true; }
+    if(deletedNames.has(card.follower)) { card.follower = ''; changed = true; }
+    if(Array.isArray(card.collaborators)) {
+      const filtered = card.collaborators.filter(n => !deletedNames.has(n));
+      if(filtered.length !== card.collaborators.length) { card.collaborators = filtered; changed = true; }
+    }
+    if(changed) { await oldDB.ref('tree_cards/' + cid).update({assignee: card.assignee, follower: card.follower, collaborators: card.collaborators || []}); fixCount++; }
+  }
+  if(fixCount > 0) log(`  已修正 ${fixCount} 張卡片的成員引用`, 'ok');
+
+  // Refresh newMembers
+  const freshSnap = await newFS.collection('members').get();
+  newMembers = freshSnap.docs.map(d => ({id: d.id, ...d.data()}));
+
+  log('✅ 成員清理完成！\n', 'ok');
+
+  // Rebuild UI
+  buildMemberCleanup();
+  // Re-run init to refresh mapping UI
+  const mapEl = document.getElementById('member-map');
+  mapEl.innerHTML = '';
+  oldMembers.forEach(name => {
+    const row = document.createElement('div'); row.className = 'row';
+    const lbl = document.createElement('div'); lbl.innerHTML = `<label>舊: ${name}</label>`;
+    const sel = document.createElement('div');
+    const s = document.createElement('select'); s.dataset.oldName = name; s.className = 'member-sel';
+    const match = newMembers.find(m => m.name === name);
+    const noOpt = document.createElement('option'); noOpt.value = ''; noOpt.textContent = '— 略過 —'; s.appendChild(noOpt);
+    newMembers.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = `${m.name} (${m.id})`; if(match && m.id === match.id) o.selected = true; s.appendChild(o); });
+    sel.innerHTML = '<label>新版成員 →</label>'; sel.appendChild(s); row.append(lbl, sel); mapEl.appendChild(row);
+  });
+});
 
 function getMemberMap() {
   const map = {};
@@ -169,6 +347,8 @@ async function doMigrate(preview) {
   const doCards = document.getElementById('chk-cards').checked;
   const doWeekly = document.getElementById('chk-weekly').checked;
   const doMembers = document.getElementById('chk-members').checked;
+  const doStatuses = document.getElementById('chk-statuses').checked;
+  const doTags = document.getElementById('chk-tags').checked;
 
   log(`\n${'='.repeat(40)}`);
   log(preview ? '👁 預覽模式（不會寫入任何資料）' : '🚀 開始遷移...');
@@ -180,7 +360,7 @@ async function doMigrate(preview) {
     if(doCards) {
       const ct = await clearMigrated('trunks');
       const cn = await clearMigrated('nodes');
-      log(`  已清除 ${ct} 筆遷移枝幹, ${cn} 筆遷移節點`, 'ok');
+      log(`  已清除 ${ct} 主幹, ${cn} 節點`, 'ok');
     }
     if(doWeekly) {
       const cd = await clearMigrated('dailyReports');
@@ -248,9 +428,68 @@ async function doMigrate(preview) {
     if(s.value) memberMap[s.dataset.oldName] = s.value;
   });
 
-  // ── 2. Cards → Independent branches + Node bubbles ──
+  // ── 1b. Statuses migration ──
+  let oldStatuses = [];
+  if(doStatuses) {
+    log('🏷️ 遷移狀態設定...');
+    const stSnap = await oldDB.ref('statuses').once('value');
+    oldStatuses = stSnap.val() || [
+      {id:'s1',label:'待處理',color:'bg-gray-200 text-gray-700'},
+      {id:'s2',label:'製作中',color:'bg-blue-200 text-blue-800'},
+      {id:'s3',label:'測試中',color:'bg-yellow-200 text-yellow-800'},
+      {id:'s4',label:'完成',color:'bg-green-200 text-green-800'},
+      {id:'s5',label:'擱置中',color:'bg-red-200 text-red-700'}
+    ];
+    if(!Array.isArray(oldStatuses)) oldStatuses = Object.values(oldStatuses);
+    log(`  找到 ${oldStatuses.length} 個狀態: ${oldStatuses.map(s=>s.label).join(', ')}`);
+
+    if(!preview) {
+      await newFS.collection('settings').doc('statuses').set({
+        items: oldStatuses,
+        _migrated: true,
+        _migratedAt: new Date().toISOString()
+      });
+    }
+    log('  ✓ 狀態設定遷移完成！', 'ok');
+    log('');
+  }
+
+  // ── 1c. Tags & tagColors migration ──
+  let oldTags = [];
+  let oldTagColors = {};
+  if(doTags) {
+    log('🔖 遷移組別標籤...');
+    const tagSnap = await oldDB.ref('tags').once('value');
+    const tagCSnap = await oldDB.ref('tagColors').once('value');
+    oldTags = tagSnap.val() || ['設計組','遊戲組','工程組','行銷組','企劃組'];
+    oldTagColors = tagCSnap.val() || {
+      '設計組':'bg-purple-100 text-purple-700',
+      '遊戲組':'bg-pink-100 text-pink-700',
+      '工程組':'bg-cyan-100 text-cyan-700',
+      '行銷組':'bg-orange-100 text-orange-700',
+      '企劃組':'bg-lime-100 text-lime-700'
+    };
+    if(!Array.isArray(oldTags)) oldTags = Object.values(oldTags);
+    log(`  找到 ${oldTags.length} 個標籤: ${oldTags.join(', ')}`);
+    oldTags.forEach(t => {
+      log(`    ${t} → ${oldTagColors[t] || '(無顏色)'}`, 'ok');
+    });
+
+    if(!preview) {
+      await newFS.collection('settings').doc('tags').set({
+        items: oldTags,
+        colors: oldTagColors,
+        _migrated: true,
+        _migratedAt: new Date().toISOString()
+      });
+    }
+    log('  ✓ 標籤設定遷移完成！', 'ok');
+    log('');
+  }
+
+  // ── 2. Folders → Trunks (with embedded branches), Comments → Nodes ──
   if(doCards) {
-    log('📦 遷移卡片...');
+    log('📦 遷移資料夾 → 主幹，卡片 → 枝幹（嵌入主幹）...');
     const cardsSnap = await oldDB.ref('tree_cards').once('value');
     const nodesSnap = await oldDB.ref('tree_nodes').once('value');
     const cards = cardsSnap.val() || {};
@@ -263,78 +502,133 @@ async function doMigrate(preview) {
       return parts.join(' › ');
     }
 
-    const cardList = Object.values(cards).filter(c => !c.archived);
-    log(`  找到 ${cardList.length} 張卡片（不含已封存）`);
+    // Collect folders that directly contain cards
+    const folderNodes = Object.values(nodes).filter(n => (n.cardRefs || []).length > 0);
+    log(`  找到 ${folderNodes.length} 個含任務的資料夾`);
+    log(`  全部卡片: ${Object.values(cards).filter(c => !c.archived).length} 張（不含已封存）`);
 
-    // Use deterministic node IDs to prevent duplicates
-    let nodeCounter = 0;
+    let trunkIdx = 0;
 
-    for(let ci = 0; ci < cardList.length; ci++) {
-      const card = cardList[ci];
-      const color = COLORS[ci % COLORS.length];
-      const branchId = 'mig_' + card.id;
-      const path = card.nodeId ? nodePath(card.nodeId) : '';
-      const ownerMid = memberMap[card.assignee] || '';
+    for(const folder of folderNodes) {
+      const trunkId = 'mig_' + folder.id;
+      const color = COLORS[trunkIdx % COLORS.length];
+      const path = nodePath(folder.id);
+      const folderCards = (folder.cardRefs || []).map(id => cards[id]).filter(c => c && !c.archived);
 
-      // links: convert to {name, url} format
-      const cardLinks = (card.docs||[]).filter(d => d.url).map(d => ({name: d.name || '', url: d.url}));
+      if(folderCards.length === 0) continue;
 
-      const trunk = {
-        id: branchId,
+      // Calculate trunk time range from its cards
+      const starts = folderCards.map(c => c.startDate).filter(Boolean).sort();
+      const ends = folderCards.map(c => c.dueDate).filter(Boolean).sort();
+      const trunkStart = starts[0] || '';
+      const trunkEnd = ends.length > 0 ? ends[ends.length - 1] : '';
+
+      // Build embedded branches array (matching app.js structure)
+      // Map old statusId → new status
+      const stMap = {'s1':'todo','s2':'wip','s3':'testing','s4':'done','s5':'hold'};
+      // Map old urgency → new priority
+      const prMap = {'最高':'highest','高':'high','普通':'normal','低':'low','長期':'low'};
+
+      const branchesArr = folderCards.map(card => ({
+        id: 'br_' + card.id,
         name: card.name,
+        start: card.startDate || card.createdAt?.slice(0,10) || '',
+        end: card.dueDate || null,
         color: color,
-        status: card.statusId === 's4' ? 'done' : 'wip',
-        priority: (card.urgency === '最高' ? 'highest' : card.urgency === '高' ? 'high' : card.urgency === '低' ? 'low' : 'normal'),
-        start: card.startDate || card.createdAt?.slice(0,10) || '2026-01-01',
-        end: card.dueDate || '',
+        prog: card.statusId === 's4' ? 100 : card.statusId === 's2' ? 50 : card.statusId === 's3' ? 75 : 0,
+        status: stMap[card.statusId] || 'todo',
+        priority: prMap[card.urgency] || 'normal'
+      }));
+
+      const ownerMid = folderCards[0] ? (memberMap[folderCards[0].assignee] || '') : '';
+      const trunk = {
+        id: trunkId,
+        name: folder.name,
+        color: color,
+        status: folderCards.every(c => c.statusId === 's4') ? 'done' : folderCards.some(c => c.statusId === 's5') && folderCards.every(c => c.statusId === 's4' || c.statusId === 's5') ? 'hold' : 'wip',
+        priority: branchesArr.some(b => b.priority === 'highest') ? 'highest' : branchesArr.some(b => b.priority === 'high') ? 'high' : 'normal',
+        start: trunkStart,
+        end: trunkEnd,
         owner: ownerMid,
-        collaborators: (card.collaborators||[]).map(n => memberMap[n]).filter(Boolean),
-        trackers: card.follower && memberMap[card.follower] ? [memberMap[card.follower]] : [],
-        desc: path ? `來源: ${path}` : '',
-        links: cardLinks,
-        branches: [],
-        isBranch: true,
+        collaborators: [],
+        trackers: [],
+        desc: path,
+        links: [],
+        branches: branchesArr,
         _migrated: true,
-        _oldId: card.id
+        _oldNodeId: folder.id
       };
 
-      log(`  枝幹: ${card.name} (${branchId})`, 'ok');
+      log(`\n  📁 主幹: ${folder.name} (${path})`, 'ok');
+      log(`     包含 ${folderCards.length} 張枝幹`);
+      branchesArr.forEach(b => log(`     ├─ ${b.name} (${b.start||'?'} ~ ${b.end||'∞'})`, 'ok'));
 
       if(!preview) {
-        // Batch limit 500, use individual sets for safety
-        await newFS.collection('trunks').doc(branchId).set(trunk);
+        await newFS.collection('trunks').doc(trunkId).set(trunk);
       }
 
-      // Convert comments → node bubbles (deterministic IDs)
-      const comments = card.comments || [];
-      if(comments.length > 0) log(`    → ${comments.length} 則留言轉為節點泡泡`);
+      // Convert comments → node bubbles (nodes collection)
+      for(const card of folderCards) {
+        const branchId = 'br_' + card.id;
+        const comments = card.comments || [];
+        if(comments.length > 0) log(`     │  ${card.name}: ${comments.length} 則留言 → 節點泡泡`);
 
-      for(let idx = 0; idx < comments.length; idx++) {
-        const cmt = comments[idx];
-        const nodeId = `mig_${card.id}_n${idx}`;
-        const memberMid = memberMap[cmt.author] || ownerMid || (newMembers[0]?.id || 'M');
-        const dateStr = cmt.createdAt ? cmt.createdAt.slice(0,10) : (card.startDate || '2026-01-01');
-        const node = {
-          id: nodeId,
-          trunk: branchId,
-          branch: branchId,
-          type: 'update',
-          date: dateStr,
-          member: memberMid,
-          collaborators: [],
-          msg: cmt.text || '',
-          notes: '',
-          images: [],
-          links: [],
-          _migrated: true,
-          _oldCardId: card.id
-        };
-        if(!preview) {
-          await newFS.collection('nodes').doc(nodeId).set(node);
+        for(let idx = 0; idx < comments.length; idx++) {
+          const cmt = comments[idx];
+          const nodeId = `mig_${card.id}_n${idx}`;
+          const memberMid = memberMap[cmt.author] || memberMap[card.assignee] || (newMembers[0]?.id || 'M');
+          const dateStr = cmt.createdAt ? cmt.createdAt.slice(0,10) : (card.startDate || '2026-01-01');
+          const node = {
+            id: nodeId,
+            trunk: trunkId,
+            branch: branchId,
+            type: 'update',
+            date: dateStr,
+            member: memberMid,
+            collaborators: [],
+            msg: cmt.text || '',
+            notes: '',
+            images: [],
+            links: [],
+            _migrated: true,
+            _oldCardId: card.id
+          };
+          if(!preview) {
+            await newFS.collection('nodes').doc(nodeId).set(node);
+          }
         }
       }
+      trunkIdx++;
     }
-    log('  ✓ 卡片遷移完成！', 'ok');
+
+    // Orphan cards → standalone trunk with single branch
+    const assignedCardIds = new Set(folderNodes.flatMap(n => n.cardRefs || []));
+    const orphans = Object.values(cards).filter(c => !c.archived && !assignedCardIds.has(c.id));
+    if(orphans.length > 0) {
+      log(`\n  📋 ${orphans.length} 張未歸屬的散落卡片 → 獨立主幹（各含一枝幹）`);
+      const orphanTrunkId = 'mig_orphans';
+      const orphanBranches = orphans.map(card => ({
+        id: 'br_' + card.id,
+        name: card.name,
+        start: card.startDate || '',
+        end: card.dueDate || null,
+        color: '#6b7280',
+        prog: card.statusId === 's4' ? 100 : 0
+      }));
+      const oStarts = orphans.map(c => c.startDate).filter(Boolean).sort();
+      const oEnds = orphans.map(c => c.dueDate).filter(Boolean).sort();
+      const orphanTrunk = {
+        id: orphanTrunkId, name: '未分類任務', color: '#6b7280',
+        status: 'wip', priority: 'normal',
+        start: oStarts[0] || '', end: oEnds.length ? oEnds[oEnds.length-1] : '',
+        owner: '', collaborators: [], trackers: [], desc: '未歸屬任何資料夾的散落卡片', links: [],
+        branches: orphanBranches, _migrated: true
+      };
+      orphanBranches.forEach(b => log(`     ├─ ${b.name}`, 'warn'));
+      if(!preview) { await newFS.collection('trunks').doc(orphanTrunkId).set(orphanTrunk); }
+    }
+
+    log('\n  ✓ 資料夾→主幹、卡片→枝幹 遷移完成！', 'ok');
   }
 
   // ── 3. Weekly → dailyReports ──
@@ -431,8 +725,193 @@ document.getElementById('btn-fix-members').addEventListener('click', async () =>
   const ct = await clearMigrated('trunks');
   const cn = await clearMigrated('nodes');
   const cd = await clearMigrated('dailyReports');
-  log(`  已清除 ${ct} 枝幹, ${cn} 節點, ${cd} dailyReports`, 'ok');
+  // Clean up settings if they were migrated
+  for(const sDoc of ['statuses','tags']) {
+    const snap = await newFS.collection('settings').doc(sDoc).get();
+    if(snap.exists && snap.data()?._migrated) { await newFS.collection('settings').doc(sDoc).delete(); }
+  }
+  log(`  已清除 ${ct} 主幹, ${cn} 節點, ${cd} dailyReports, 及遷移的設定`, 'ok');
   log('✅ 清除完成！重新整理新版工具即可。\n', 'ok');
+});
+
+// ── Recover members ──
+document.getElementById('btn-recover-members').addEventListener('click', async () => {
+  log(`\n${'='.repeat(40)}`);
+  log('🔍 掃描所有資料來源中的成員名稱...');
+
+  const names = new Set();
+
+  // 1. From tree_cards: assignee, follower, collaborators, comments.author
+  const cardsSnap = await oldDB.ref('tree_cards').once('value');
+  const cards = cardsSnap.val() || {};
+  let cardCount = 0;
+  for(const card of Object.values(cards)) {
+    if(card.assignee) names.add(card.assignee);
+    if(card.follower) names.add(card.follower);
+    (card.collaborators || []).forEach(n => { if(n) names.add(n); });
+    (card.comments || []).forEach(c => { if(c.author) names.add(c.author); });
+    cardCount++;
+  }
+  log(`  卡片: 掃描 ${cardCount} 張，找到 ${names.size} 個名稱`, 'ok');
+
+  // 2. From weekly: member names
+  const weeklySnap = await oldDB.ref('weekly').once('value');
+  const weeklyData = weeklySnap.val();
+  if(weeklyData && weeklyData.weeks) {
+    for(const week of weeklyData.weeks) {
+      for(const m of (week.members || [])) {
+        if(m.name) names.add(m.name);
+      }
+    }
+    log(`  週進度: 掃描 ${weeklyData.weeks.length} 週`, 'ok');
+  }
+
+  // 3. From existing members (if any remain)
+  const memSnap = await oldDB.ref('members').once('value');
+  const existing = memSnap.val();
+  if(existing) {
+    const arr = Array.isArray(existing) ? existing : Object.values(existing);
+    arr.forEach(n => { if(n) names.add(n); });
+    log(`  現有成員: ${arr.length} 位`, 'ok');
+  }
+
+  // Filter out empty/null
+  const recovered = [...names].filter(n => n && n.trim().length > 0).sort();
+  log(`\n共找到 ${recovered.length} 個不重複成員: ${recovered.join(', ')}`, 'ok');
+
+  // Show preview with checkboxes
+  const previewEl = document.getElementById('recover-preview');
+  previewEl.innerHTML = '';
+
+  if(recovered.length === 0) {
+    previewEl.innerHTML = '<p style="color:#e03e3e;font-size:12px;">未找到任何成員名稱。卡片和週進度資料可能也已被清空。</p>';
+    return;
+  }
+
+  const hint = document.createElement('p');
+  hint.style.cssText = 'font-size:11px;color:#6b6b6a;margin-bottom:6px;';
+  hint.textContent = '勾選要恢復的成員，取消勾選亂碼或不需要的：';
+  previewEl.appendChild(hint);
+
+  recovered.forEach(name => {
+    const garbled = isGarbled(name);
+    const row = document.createElement('label');
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;';
+    if(garbled) row.style.color = '#e03e3e';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'recover-cb';
+    cb.value = name;
+    cb.checked = !garbled;
+    row.appendChild(cb);
+    const span = document.createElement('span');
+    span.textContent = name;
+    if(garbled) { span.style.textDecoration = 'line-through'; span.title = '疑似亂碼'; }
+    row.appendChild(span);
+    previewEl.appendChild(row);
+  });
+
+  const btnRow = document.createElement('div');
+  btnRow.style.marginTop = '10px';
+  const btnWrite = document.createElement('button');
+  btnWrite.textContent = '✅ 確認寫回舊版 members';
+  btnWrite.style.cssText = 'background:#0f7b6c;color:#fff;font-size:13px;font-weight:600;';
+  btnWrite.addEventListener('click', async () => {
+    const selected = [];
+    document.querySelectorAll('.recover-cb:checked').forEach(cb => selected.push(cb.value));
+    if(selected.length === 0) { log('未勾選任何成員', 'warn'); return; }
+    if(!confirm(`確認要將以下 ${selected.length} 位成員寫回舊版？\n\n${selected.join(', ')}`)) return;
+
+    await oldDB.ref('members').set(selected);
+    oldMembers = selected;
+    log(`\n✅ 已恢復 ${selected.length} 位成員: ${selected.join(', ')}`, 'ok');
+    log('請重新整理頁面以更新對應表。\n', 'ok');
+
+    // Refresh mapping UI
+    const mapEl = document.getElementById('member-map');
+    mapEl.innerHTML = '';
+    const freshNewSnap = await newFS.collection('members').get();
+    newMembers = freshNewSnap.docs.map(d => ({id: d.id, ...d.data()}));
+    selected.forEach(name => {
+      const row = document.createElement('div'); row.className = 'row';
+      const lbl = document.createElement('div'); lbl.innerHTML = '<label>舊: ' + name + '</label>';
+      const sel = document.createElement('div');
+      const s = document.createElement('select'); s.dataset.oldName = name; s.className = 'member-sel';
+      const match = newMembers.find(m => m.name === name);
+      const noOpt = document.createElement('option'); noOpt.value = ''; noOpt.textContent = '— 略過 —'; s.appendChild(noOpt);
+      newMembers.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.name + ' (' + m.id + ')'; if(match && m.id === match.id) o.selected = true; s.appendChild(o); });
+      sel.innerHTML = '<label>新版成員 →</label>'; sel.appendChild(s); row.append(lbl, sel); mapEl.appendChild(row);
+    });
+    buildMemberCleanup();
+  });
+  btnRow.appendChild(btnWrite);
+  previewEl.appendChild(btnRow);
+});
+
+// ── Nuke helpers ──
+async function nukeFirestoreCollection(colName) {
+  let total = 0;
+  while(true) {
+    const snap = await newFS.collection(colName).limit(450).get();
+    if(snap.empty) break;
+    const b = newFS.batch();
+    snap.docs.forEach(d => b.delete(d.ref));
+    await b.commit();
+    total += snap.size;
+  }
+  return total;
+}
+
+const NEW_COLLECTIONS = ['trunks','nodes','dailyReports','members','settings'];
+const OLD_PATHS = ['tree_nodes','tree_cards','tree_rootNodes','statuses','tags','tagC','members','admins','rolePerms','quality','weekly','notifs'];
+
+async function nukeNew() {
+  log(`\n${'='.repeat(40)}`);
+  log('💥 清空新版 Firestore 所有資料...');
+  for(const col of NEW_COLLECTIONS) {
+    const n = await nukeFirestoreCollection(col);
+    log(`  ${col}: 刪除 ${n} 筆`, n > 0 ? 'ok' : 'warn');
+  }
+  newMembers = [];
+  log('✅ 新版資料已全部清空！\n', 'ok');
+}
+
+async function nukeOld() {
+  log(`\n${'='.repeat(40)}`);
+  log('💥 清空舊版 Realtime Database 所有資料...');
+  for(const path of OLD_PATHS) {
+    const snap = await oldDB.ref(path).once('value');
+    if(snap.exists()) {
+      await oldDB.ref(path).remove();
+      log(`  ${path}: 已刪除`, 'ok');
+    } else {
+      log(`  ${path}: (空，跳過)`, 'warn');
+    }
+  }
+  oldMembers = [];
+  log('✅ 舊版資料已全部清空！\n', 'ok');
+}
+
+document.getElementById('btn-nuke-new').addEventListener('click', async () => {
+  if(!confirm('⚠️ 確定要清空【新版】所有資料嗎？\n\n這會刪除新版 Firestore 中的：\n' + NEW_COLLECTIONS.join(', ') + '\n\n此操作無法復原！')) return;
+  if(!confirm('再次確認：真的要清空新版所有資料？')) return;
+  await nukeNew();
+  buildMemberCleanup();
+});
+
+document.getElementById('btn-nuke-old').addEventListener('click', async () => {
+  if(!confirm('⚠️ 確定要清空【舊版】所有資料嗎？\n\n這會刪除舊版 Realtime DB 中的：\n' + OLD_PATHS.join(', ') + '\n\n此操作無法復原！')) return;
+  if(!confirm('再次確認：真的要清空舊版所有資料？')) return;
+  await nukeOld();
+  buildMemberCleanup();
+});
+
+document.getElementById('btn-nuke-both').addEventListener('click', async () => {
+  if(!confirm('⚠️⚠️ 確定要清空【新版 + 舊版】所有資料嗎？\n\n此操作無法復原！！')) return;
+  if(!confirm('最後確認：這會永久刪除兩個 Firebase 專案中的所有資料，確定嗎？')) return;
+  await nukeNew();
+  await nukeOld();
+  buildMemberCleanup();
 });
 
 init();

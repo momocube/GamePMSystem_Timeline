@@ -604,10 +604,15 @@ function buildLabels(){
       dragTrunkIdx=null;
     });
 
+    // Fade trunk label for done/hold
+    if(t.status==='done'||t.status==='hold'){tr.style.opacity='0.4';tr.style.filter='saturate(0.25)';}
     const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
     const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background=t.color;
     const nm=document.createElement('span');nm.className='lc-tname';nm.style.color=t.color;nm.textContent=t.name;
+    // Priority indicator on trunk name
+    if(t.priority==='highest'){const pi=document.createElement('span');pi.textContent='🔥';pi.style.cssText='font-size:10px;margin-left:3px;';tr.dataset.pri='highest';nm.after(pi);}
+    else if(t.priority==='high'){const pi=document.createElement('span');pi.textContent='⚡';pi.style.cssText='font-size:10px;margin-left:3px;';nm.after(pi);}
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
     tr.append(drag,ca,dt,nm,addBrBtn);
@@ -629,6 +634,10 @@ function buildLabels(){
     t.branches.forEach((b,bidx)=>{
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
       const br=document.createElement('div');br.className='lc-br';
+      // Fade labels for done/hold
+      const lbStatus=b.status||t.status||'todo';
+      const lbPri=b.priority||t.priority||'normal';
+      if(lbStatus==='done'||lbStatus==='hold'){br.style.opacity='0.4';br.style.filter='saturate(0.25)';}
       br.draggable=true;
       // Drag child branch out → becomes independent
       br.addEventListener('dragstart',e=>{
@@ -655,7 +664,7 @@ function buildLabels(){
         const curIdx=PROJECT_STATUSES.findIndex(s=>s.id===bStatus);
         const nextIdx=(curIdx+1)%PROJECT_STATUSES.length;
         b.status=PROJECT_STATUSES[nextIdx].id;
-        saveTrunk(t);buildLabels();
+        saveTrunk(t);buildLabels();buildTimeline();
       });
       top.append(bd,bn,stChip);br.appendChild(top);
       // duration
@@ -1247,8 +1256,15 @@ function buildTimeline(){
 
     // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='trow';tr.dataset.trunk=t.id;
+    // Priority & status visual
+    const tIsFaded=t.status==='done'||t.status==='hold';
+    const tIsHighest=t.priority==='highest';
+    const tIsHigh=t.priority==='high';
+    if(tIsFaded){tr.style.opacity='0.4';tr.style.filter='saturate(0.3)';}
     const bar=document.createElement('div');bar.className='tbar';
     bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
+    if(tIsHighest){bar.dataset.pri='highest';bar.style.boxShadow='0 0 0 2px #dc2626';bar.style.borderRadius='3px';bar.style.height='6px';}
+    else if(tIsHigh){bar.style.boxShadow='0 0 0 2px #f97316';bar.style.borderRadius='3px';bar.style.height='6px';}
     tr.appendChild(bar);
     if(!exp[t.id])addPills(tr,t);
     tr.addEventListener('click',()=>{toggle(t.id);openDetailPanel(t.id);});
@@ -1260,6 +1276,13 @@ function buildTimeline(){
     t.branches.forEach((b,bidx)=>{
       const brow=document.createElement('div');brow.className='brow';brow.dataset.branch=b.id;
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
+      // Priority & status visual for branch
+      const bStatus=b.status||t.status||'todo';
+      const bPriority=b.priority||t.priority||'normal';
+      const bIsFaded=bStatus==='done'||bStatus==='hold';
+      const bIsHighest=bPriority==='highest';
+      const bIsHigh=bPriority==='high';
+      if(bIsFaded){brow.style.opacity='0.35';brow.style.filter='saturate(0.25)';}
       // stem
       const st=document.createElement('div');st.className='stem';
       st.style.cssText=`left:${dx(b.start)}px;background:${displayColor}`;brow.appendChild(st);
@@ -1271,14 +1294,12 @@ function buildTimeline(){
       // bar
       const bb=document.createElement('div');bb.className='bbar';
       if(!b.end){
-        // no end date: bar extends to visible right (solid)
         const w=tw()-dx(b.start);
         bb.style.cssText=`left:${dx(b.start)}px;width:${w}px;background:${displayColor};opacity:.7;`;
       } else {
         bb.style.cssText=`left:${dx(b.start)}px;width:${dx(b.end)-dx(b.start)}px;background:${displayColor}`;
         const el=document.createElement('div');el.className='endlbl';
         el.style.left=(dx(b.end)+4)+'px';el.textContent=fmt(b.end);brow.appendChild(el);
-        // deadline warning
         const daysLeft=(new Date(b.end)-TODAY)/86400000;
         if(daysLeft>0&&daysLeft<14){
           const dw=document.createElement('div');
@@ -1286,6 +1307,9 @@ function buildTimeline(){
           brow.appendChild(dw);
         }
       }
+      // Priority left-border accent on bar
+      if(bIsHighest){bb.dataset.pri='highest';bb.style.borderLeft='4px solid #dc2626';bb.style.borderRadius='3px';bb.style.boxShadow='0 0 6px rgba(220,38,38,0.3)';}
+      else if(bIsHigh){bb.style.borderLeft='4px solid #f97316';bb.style.borderRadius='3px';}
       brow.appendChild(bb);
       NODES.filter(n=>n.branch===b.id).forEach(n=>addCard(n,brow));
       // Fan out overlapping cards on the same date
@@ -1356,7 +1380,7 @@ function addCard(n,brow){
   // Type-based bubble colors from REPORT_TYPES
   const rtObj=reportTypeObj(n.type);
   const tc={bg:rtObj.bg,border:rtObj.border,accent:rtObj.color};
-  card.style.background=tc.bg;
+  card.style.background='#fff';
   card.style.borderColor=tc.border;
 
   let imgH='';

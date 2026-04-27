@@ -90,7 +90,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .nwrap.hidden{display:none;}
 .nav-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;border:2px solid var(--surface2);box-shadow:0 1px 4px var(--shadow2);transition:transform .13s;color:#fff;flex-shrink:0;margin-top:3px;}
 .nwrap:hover .nav-dot{transform:scale(1.2);}
-.ncard{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;box-shadow:0 1px 4px var(--shadow);transition:box-shadow .13s;min-width:100px;width:auto;max-width:200px;}
+.ncard{background:#fff;border:1px solid var(--border);border-radius:6px;padding:3px 5px;box-shadow:0 1px 4px var(--shadow);transition:box-shadow .13s;min-width:70px;width:auto;max-width:133px;}
 .nwrap:hover .ncard{box-shadow:0 3px 10px var(--shadow2);}
 .ncwho{font-size:10px;font-weight:600;font-family:'DM Mono',monospace;margin-bottom:2px;}
 .ncmsg{font-size:10px;color:var(--text-mid);line-height:1.5;white-space:normal;word-break:break-word;}
@@ -365,6 +365,8 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 
 @keyframes pop{0%{transform:translateX(-50%) scale(0);opacity:0;}65%{transform:translateX(-50%) scale(1.08);}100%{transform:translateX(-50%) scale(1);opacity:1;}}
 .nwrap.new{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
+@keyframes urgpulse-bar{0%,100%{box-shadow:0 0 0 2px #dc2626}50%{box-shadow:0 0 8px 3px rgba(220,38,38,0.4)}}
+.tbar[data-pri="highest"],.bbar[data-pri="highest"]{animation:urgpulse-bar 2s ease infinite;}
 
 /* ── ADD TRUNK/BRANCH BUTTON ── */
 #add-trunk-btn-wrap{padding:8px 10px;flex-shrink:0;background:var(--surface);display:flex;gap:6px;position:sticky;bottom:0;z-index:5;border-top:1px solid var(--border);}
