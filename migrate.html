@@ -41,7 +41,7 @@
 
 <button id="btn-migrate">🚀 開始遷移</button>
 <button id="btn-preview" style="background:#6b7280;color:#fff;margin:16px 0 0 8px;">👁 預覽（不寫入）</button>
-<button id="btn-fix-members" style="background:#d9730d;color:#fff;margin:16px 0 0 8px;">🔧 修復已遷移資料的成員</button>
+<button id="btn-fix-members" style="background:#d32f2f;color:#fff;margin:16px 0 0 8px;">🗑️ 清除已遷移資料</button>
 
 <div id="log"></div>
 
@@ -147,7 +147,22 @@ function getMemberMap() {
 }
 
 // Color palette for migrated branches
-const COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688','#ff6f00','#7b1fa2'];
+const COLORS = ['#1976d2','#d32f2f','#2e7d32','#e65100','#7b1fa2','#c62828','#1565c0','#00695c','#ef6c00','#6a1b9a'];
+
+// ── Helper: delete all docs with _migrated:true in a collection ──
+async function clearMigrated(colName) {
+  const snap = await newFS.collection(colName).where('_migrated','==',true).get();
+  if(snap.empty) return 0;
+  // Firestore batch limit = 500, chunk if needed
+  const docs = snap.docs;
+  for(let i = 0; i < docs.length; i += 450) {
+    const chunk = docs.slice(i, i + 450);
+    const b = newFS.batch();
+    chunk.forEach(d => b.delete(d.ref));
+    await b.commit();
+  }
+  return docs.length;
+}
 
 async function doMigrate(preview) {
   memberMap = getMemberMap();
@@ -159,11 +174,25 @@ async function doMigrate(preview) {
   log(preview ? '👁 預覽模式（不會寫入任何資料）' : '🚀 開始遷移...');
   log(`${'='.repeat(40)}\n`);
 
-  // ── 0. Auto-import members from old → new ──
+  // ── 0. Clean up previously migrated data (prevent duplicates) ──
+  if(!preview) {
+    log('🧹 清除先前遷移的資料（防止重複）...');
+    if(doCards) {
+      const ct = await clearMigrated('trunks');
+      const cn = await clearMigrated('nodes');
+      log(`  已清除 ${ct} 筆遷移枝幹, ${cn} 筆遷移節點`, 'ok');
+    }
+    if(doWeekly) {
+      const cd = await clearMigrated('dailyReports');
+      log(`  已清除 ${cd} 筆遷移 dailyReports`, 'ok');
+    }
+    log('');
+  }
+
+  // ── 1. Auto-import members from old → new ──
   if(doMembers) {
     log('👥 匯入舊版成員到新版...');
-    const MEMBER_COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688'];
-    // Re-read new members to get latest state
+    const MEMBER_COLORS = ['#1976d2','#d32f2f','#2e7d32','#e65100','#7b1fa2','#c62828','#1565c0','#00695c'];
     const freshSnap = await newFS.collection('members').get();
     const existingNew = freshSnap.docs.map(d => ({id: d.id, ...d.data()}));
     const existingNames = new Set(existingNew.map(m => m.name));
@@ -174,31 +203,21 @@ async function doMigrate(preview) {
     oldMembers.forEach((name, idx) => {
       if(existingNames.has(name)) {
         log(`  ${name} — 新版已存在，跳過`, 'ok');
-        // Update memberMap to use existing ID
         const existing = existingNew.find(m => m.name === name);
         if(existing) memberMap[name] = existing.id;
         return;
       }
-      // Create new member in Firestore
       const id = name.slice(0,1).toUpperCase() + (idx > 0 ? idx : '');
-      // Check ID collision
       let finalId = id;
       let suffix = 1;
       while(existingNew.find(m => m.id === finalId)) { finalId = id + suffix; suffix++; }
 
-      const memberDoc = {
-        id: finalId,
-        name: name,
-        color: MEMBER_COLORS[idx % MEMBER_COLORS.length]
-      };
-      log(`  + ${name} → ID: ${finalId}, 顏色: ${memberDoc.color}`, 'ok');
+      const memberDoc = { id: finalId, name: name, color: MEMBER_COLORS[idx % MEMBER_COLORS.length] };
+      log(`  + ${name} → ID: ${finalId}`, 'ok');
       memberMap[name] = finalId;
       addedCount++;
 
-      if(!preview) {
-        memBatch.set(newFS.collection('members').doc(finalId), memberDoc);
-      }
-      // Also add to newMembers so subsequent steps can use them
+      if(!preview) memBatch.set(newFS.collection('members').doc(finalId), memberDoc);
       newMembers.push(memberDoc);
     });
 
@@ -209,16 +228,14 @@ async function doMigrate(preview) {
       log('  所有成員已存在，無需新增', 'ok');
     }
 
-    // Update the mapping UI: add new options and select them
+    // Update the mapping UI
     document.querySelectorAll('.member-sel').forEach(s => {
       const mapped = memberMap[s.dataset.oldName];
       if(!mapped) return;
-      // Ensure option exists
       if(!s.querySelector(`option[value="${mapped}"]`)) {
         const mObj = newMembers.find(m => m.id === mapped);
         const o = document.createElement('option');
-        o.value = mapped;
-        o.textContent = `${mObj ? mObj.name : mapped} (${mapped})`;
+        o.value = mapped; o.textContent = `${mObj ? mObj.name : mapped} (${mapped})`;
         s.appendChild(o);
       }
       s.value = mapped;
@@ -226,12 +243,12 @@ async function doMigrate(preview) {
     log('');
   }
 
-  // Merge UI selections back (UI may have user-adjusted values)
+  // Merge UI selections back
   document.querySelectorAll('.member-sel').forEach(s => {
     if(s.value) memberMap[s.dataset.oldName] = s.value;
   });
 
-  // ── 1. Cards → Independent branches + Node bubbles ──
+  // ── 2. Cards → Independent branches + Node bubbles ──
   if(doCards) {
     log('📦 遷移卡片...');
     const cardsSnap = await oldDB.ref('tree_cards').once('value');
@@ -239,24 +256,18 @@ async function doMigrate(preview) {
     const cards = cardsSnap.val() || {};
     const nodes = nodesSnap.val() || {};
 
-    // Build path for each card
     function nodePath(nid) {
       const parts = [];
       let cur = nid;
-      while(cur) {
-        const n = nodes[cur];
-        if(!n) break;
-        parts.unshift(n.name);
-        cur = n.parentId;
-      }
+      while(cur) { const n = nodes[cur]; if(!n) break; parts.unshift(n.name); cur = n.parentId; }
       return parts.join(' › ');
     }
 
     const cardList = Object.values(cards).filter(c => !c.archived);
     log(`  找到 ${cardList.length} 張卡片（不含已封存）`);
 
-    let nodeCounter = Date.now();
-    const batch = preview ? null : newFS.batch();
+    // Use deterministic node IDs to prevent duplicates
+    let nodeCounter = 0;
 
     for(let ci = 0; ci < cardList.length; ci++) {
       const card = cardList[ci];
@@ -265,7 +276,9 @@ async function doMigrate(preview) {
       const path = card.nodeId ? nodePath(card.nodeId) : '';
       const ownerMid = memberMap[card.assignee] || '';
 
-      // Create independent branch (trunk with isBranch:true)
+      // links: convert to {name, url} format
+      const cardLinks = (card.docs||[]).filter(d => d.url).map(d => ({name: d.name || '', url: d.url}));
+
       const trunk = {
         id: branchId,
         name: card.name,
@@ -278,32 +291,33 @@ async function doMigrate(preview) {
         collaborators: (card.collaborators||[]).map(n => memberMap[n]).filter(Boolean),
         trackers: card.follower && memberMap[card.follower] ? [memberMap[card.follower]] : [],
         desc: path ? `來源: ${path}` : '',
-        links: (card.docs||[]).map(d => d.url).filter(Boolean),
+        links: cardLinks,
         branches: [],
         isBranch: true,
         _migrated: true,
         _oldId: card.id
       };
 
-      log(`  枝幹: ${card.name} (${branchId}) — ${path}`, 'ok');
+      log(`  枝幹: ${card.name} (${branchId})`, 'ok');
 
       if(!preview) {
-        batch.set(newFS.collection('trunks').doc(branchId), trunk);
+        // Batch limit 500, use individual sets for safety
+        await newFS.collection('trunks').doc(branchId).set(trunk);
       }
 
-      // Convert comments → node bubbles
+      // Convert comments → node bubbles (deterministic IDs)
       const comments = card.comments || [];
-      if(comments.length > 0) {
-        log(`    → ${comments.length} 則留言轉為節點泡泡`);
-      }
-      comments.forEach((cmt, idx) => {
-        const nodeId = String(++nodeCounter);
+      if(comments.length > 0) log(`    → ${comments.length} 則留言轉為節點泡泡`);
+
+      for(let idx = 0; idx < comments.length; idx++) {
+        const cmt = comments[idx];
+        const nodeId = `mig_${card.id}_n${idx}`;
         const memberMid = memberMap[cmt.author] || ownerMid || (newMembers[0]?.id || 'M');
         const dateStr = cmt.createdAt ? cmt.createdAt.slice(0,10) : (card.startDate || '2026-01-01');
         const node = {
           id: nodeId,
           trunk: branchId,
-          branch: branchId, // independent branch: trunk=branch
+          branch: branchId,
           type: 'update',
           date: dateStr,
           member: memberMid,
@@ -316,19 +330,14 @@ async function doMigrate(preview) {
           _oldCardId: card.id
         };
         if(!preview) {
-          batch.set(newFS.collection('nodes').doc(nodeId), node);
+          await newFS.collection('nodes').doc(nodeId).set(node);
         }
-      });
+      }
     }
-
-    if(!preview && cardList.length > 0) {
-      log('  寫入 Firestore...', 'warn');
-      await batch.commit();
-      log('  ✓ 卡片遷移完成！', 'ok');
-    }
+    log('  ✓ 卡片遷移完成！', 'ok');
   }
 
-  // ── 2. Weekly → dailyReports ──
+  // ── 3. Weekly → dailyReports ──
   if(doWeekly) {
     log('\n📊 遷移週進度...');
     const weeklySnap = await oldDB.ref('weekly').once('value');
@@ -339,10 +348,6 @@ async function doMigrate(preview) {
       const weeks = weeklyData.weeks;
       log(`  找到 ${weeks.length} 個週次`);
 
-      const batch2 = preview ? null : newFS.batch();
-      let drCount = 0;
-
-      // Taiwan holidays
       const HOL = new Set(['2026-01-01','2026-02-16','2026-02-17','2026-02-18','2026-02-19','2026-02-20','2026-02-21','2026-02-22','2026-02-23','2026-04-03','2026-04-04','2026-04-05','2026-04-06','2026-05-01','2026-06-19','2026-06-20','2026-06-21','2026-09-25','2026-09-26','2026-09-27','2026-10-10']);
       function isWork(d) {
         const x = new Date(d+'T00:00:00').getDay();
@@ -350,92 +355,64 @@ async function doMigrate(preview) {
       }
       function getWorkdays(start, n) {
         const r = [], d = new Date(start+'T00:00:00');
-        while(r.length < n) {
-          const s = d.toISOString().slice(0,10);
-          if(isWork(s)) r.push(s);
-          d.setDate(d.getDate()+1);
-        }
+        while(r.length < n) { const s = d.toISOString().slice(0,10); if(isWork(s)) r.push(s); d.setDate(d.getDate()+1); }
         return r;
       }
 
-      // Category name → new ID mapping
+      // Category mapping (出差/公出/會議 → misc, 因為已移除)
       const CAT_MAP = {
         '研發':'dev','設計':'design','外包':'outsource','文件':'doc',
-        '工務':'eng','維護':'maintain','外展':'outreach','出差':'trip',
-        '公出':'business','會議':'meeting','雜項':'misc','請假':'leave'
+        '工務':'eng','維護':'maintain','外展':'outreach',
+        '出差':'misc','公出':'misc','會議':'misc',
+        '雜項':'misc','請假':'leave'
       };
-      function mapCat(type) { return CAT_MAP[type] || 'dev'; }
+      function mapCat(type) { return CAT_MAP[type] || 'misc'; }
 
-      weeks.forEach((week, wi) => {
+      let drCount = 0;
+
+      for(const week of weeks) {
         const wdays = week.weekLabel ? getWorkdays(week.weekLabel, 5) : [];
-        if(!wdays.length) return;
+        if(!wdays.length) continue;
         log(`  週次 ${week.weekLabel} (${wdays[0]}~${wdays[4]})`);
 
-        (week.members || []).forEach(rawM => {
+        for(const rawM of (week.members || [])) {
           const mName = rawM.name;
           const mId = memberMap[mName];
-          if(!mId) { log(`    跳過 ${mName}（無對應成員）`, 'warn'); return; }
+          if(!mId) { log(`    跳過 ${mName}（無對應成員）`, 'warn'); continue; }
 
-          // Collect all entries per date (daily items + promises on first day)
-          const dateEntries = {}; // dateStr → entries[]
+          const dateEntries = {};
 
           const dailyItems = Array.isArray(rawM.dailyItems) ? rawM.dailyItems : [];
           dailyItems.forEach((dayItems, di) => {
             if(!Array.isArray(dayItems) || dayItems.length === 0) return;
-            const dateStr = wdays[di];
-            if(!dateStr) return;
+            const dateStr = wdays[di]; if(!dateStr) return;
             if(!dateEntries[dateStr]) dateEntries[dateStr] = [];
             dayItems.forEach(item => {
-              dateEntries[dateStr].push({
-                cat: mapCat(item.type),
-                note: item.text || '',
-                branchId: '',
-                done: false,
-                statusNote: '',
-                links: []
-              });
+              dateEntries[dateStr].push({ cat: mapCat(item.type), note: item.text || '', branchId: '', done: false, statusNote: '', links: [] });
             });
           });
 
-          // Add promises as entries on the first workday
           const promises = rawM.promises || [];
           if(promises.length > 0 && wdays[0]) {
             if(!dateEntries[wdays[0]]) dateEntries[wdays[0]] = [];
             promises.forEach(p => {
               if(!p.text) return;
-              dateEntries[wdays[0]].push({
-                cat: 'dev',
-                note: '📌 ' + p.text + (p.status ? ' (' + p.status + ')' : ''),
-                branchId: '',
-                done: p.status === '已完成',
-                statusNote: p.status || '',
-                links: []
-              });
+              dateEntries[wdays[0]].push({ cat: 'dev', note: '📌 ' + p.text + (p.status ? ' (' + p.status + ')' : ''), branchId: '', done: p.status === '已完成', statusNote: p.status || '', links: [] });
             });
           }
 
-          // Write each date's entries
-          Object.entries(dateEntries).forEach(([dateStr, entries]) => {
+          for(const [dateStr, entries] of Object.entries(dateEntries)) {
             const docId = `${dateStr}_${mId}`;
             log(`    ${dateStr} ${mName}: ${entries.length} 項`);
             drCount++;
             if(!preview) {
-              batch2.set(newFS.collection('dailyReports').doc(docId), {
-                date: dateStr,
-                member: mId,
-                entries: entries,
-                _migrated: true
-              });
+              await newFS.collection('dailyReports').doc(docId).set({ date: dateStr, member: mId, entries, _migrated: true });
             }
-          });
-        });
-      });
-
-      if(!preview && drCount > 0) {
-        log('  寫入 Firestore...', 'warn');
-        await batch2.commit();
-        log(`  ✓ 週進度遷移完成！(${drCount} 筆 dailyReports)`, 'ok');
+          }
+        }
       }
+
+      if(drCount > 0) log(`  ✓ 週進度遷移完成！(${drCount} 筆)`, 'ok');
     }
   }
 
@@ -446,132 +423,16 @@ async function doMigrate(preview) {
 document.getElementById('btn-migrate').addEventListener('click', () => doMigrate(false));
 document.getElementById('btn-preview').addEventListener('click', () => doMigrate(true));
 
-// Fix existing migrated data: re-import members, then update all trunks/nodes with correct member IDs
+// ── Clean up only migrated data ──
 document.getElementById('btn-fix-members').addEventListener('click', async () => {
+  if(!confirm('確定要清除所有已遷移的資料嗎？\n（只會刪除有 _migrated 標記的資料，手動新增的不受影響）')) return;
   log(`\n${'='.repeat(40)}`);
-  log('🔧 修復已遷移資料的成員...');
-  log(`${'='.repeat(40)}\n`);
-
-  // Step 1: Import members from old → new
-  const MEMBER_COLORS = ['#2eaadc','#e03e3e','#0f7b6c','#d9730d','#6940a5','#cb3837','#448aff','#009688'];
-  const freshSnap = await newFS.collection('members').get();
-  const existingNew = freshSnap.docs.map(d => ({id: d.id, ...d.data()}));
-  const existingNames = new Set(existingNew.map(m => m.name));
-
-  const memBatch = newFS.batch();
-  const nameToId = {};
-  // Map existing
-  existingNew.forEach(m => { nameToId[m.name] = m.id; });
-
-  let addedCount = 0;
-  oldMembers.forEach((name, idx) => {
-    if(existingNames.has(name)) {
-      log(`  ${name} — 已存在 (${nameToId[name]})`, 'ok');
-      return;
-    }
-    let finalId = name.slice(0,1).toUpperCase() + (idx > 0 ? String(idx) : '');
-    let suffix = 1;
-    while(existingNew.find(m => m.id === finalId) || Object.values(nameToId).includes(finalId)) { finalId = name.slice(0,1).toUpperCase() + suffix; suffix++; }
-
-    const memberDoc = { id: finalId, name: name, color: MEMBER_COLORS[idx % MEMBER_COLORS.length] };
-    memBatch.set(newFS.collection('members').doc(finalId), memberDoc);
-    nameToId[name] = finalId;
-    addedCount++;
-    log(`  + 新增 ${name} → ${finalId}`, 'ok');
-  });
-
-  if(addedCount > 0) {
-    await memBatch.commit();
-    log(`  ✓ 新增 ${addedCount} 位成員\n`);
-  }
-
-  // Step 2: Fix trunks — update owner, collaborators, trackers
-  log('修復枝幹的成員欄位...');
-  const trunkSnap = await newFS.collection('trunks').get();
-  const fixBatch = newFS.batch();
-  let fixCount = 0;
-
-  trunkSnap.docs.forEach(doc => {
-    const data = doc.data();
-    let changed = false;
-    const updates = {};
-
-    // Fix owner: if it's a name string instead of ID
-    if(data.owner && !existingNew.find(m => m.id === data.owner) && nameToId[data.owner]) {
-      updates.owner = nameToId[data.owner];
-      changed = true;
-    }
-    // Also check if owner is empty but we can guess from old data
-    if(data._migrated && data._oldId) {
-      // This is a migrated card — try to fix from old card data
-    }
-
-    // Fix collaborators array
-    if(Array.isArray(data.collaborators)) {
-      const fixed = data.collaborators.map(c => nameToId[c] || c);
-      if(JSON.stringify(fixed) !== JSON.stringify(data.collaborators)) { updates.collaborators = fixed; changed = true; }
-    }
-    // Fix trackers array
-    if(Array.isArray(data.trackers)) {
-      const fixed = data.trackers.map(c => nameToId[c] || c);
-      if(JSON.stringify(fixed) !== JSON.stringify(data.trackers)) { updates.trackers = fixed; changed = true; }
-    }
-
-    if(changed) {
-      fixBatch.update(doc.ref, updates);
-      fixCount++;
-      log(`  枝幹 ${data.name}: owner=${updates.owner||data.owner}`, 'ok');
-    }
-  });
-
-  // Step 3: Fix nodes — update member and collaborators
-  log('修復節點泡泡的成員欄位...');
-  const nodeSnap = await newFS.collection('nodes').get();
-  let nodeFixCount = 0;
-
-  nodeSnap.docs.forEach(doc => {
-    const data = doc.data();
-    let changed = false;
-    const updates = {};
-
-    // Fix member
-    if(data.member && !existingNew.find(m => m.id === data.member) && nameToId[data.member]) {
-      updates.member = nameToId[data.member];
-      changed = true;
-    }
-    // Fix collaborators
-    if(Array.isArray(data.collaborators)) {
-      const fixed = data.collaborators.map(c => nameToId[c] || c);
-      if(JSON.stringify(fixed) !== JSON.stringify(data.collaborators)) { updates.collaborators = fixed; changed = true; }
-    }
-
-    if(changed) {
-      fixBatch.update(doc.ref, updates);
-      nodeFixCount++;
-    }
-  });
-
-  // Step 4: Fix dailyReports — update member
-  log('修復每日代辦的成員欄位...');
-  const drSnap = await newFS.collection('dailyReports').get();
-  let drFixCount = 0;
-
-  drSnap.docs.forEach(doc => {
-    const data = doc.data();
-    if(data.member && !existingNew.find(m => m.id === data.member) && nameToId[data.member]) {
-      fixBatch.update(doc.ref, { member: nameToId[data.member] });
-      drFixCount++;
-    }
-  });
-
-  if(fixCount + nodeFixCount + drFixCount > 0) {
-    await fixBatch.commit();
-    log(`\n✓ 修復完成：${fixCount} 枝幹, ${nodeFixCount} 節點, ${drFixCount} 每日代辦`, 'ok');
-  } else {
-    log('\n所有資料的成員欄位正常，無需修復。', 'ok');
-  }
-
-  log('重新整理新版工具即可看到修復結果。\n');
+  log('🧹 清除已遷移資料...');
+  const ct = await clearMigrated('trunks');
+  const cn = await clearMigrated('nodes');
+  const cd = await clearMigrated('dailyReports');
+  log(`  已清除 ${ct} 枝幹, ${cn} 節點, ${cd} dailyReports`, 'ok');
+  log('✅ 清除完成！重新整理新版工具即可。\n', 'ok');
 });
 
 init();

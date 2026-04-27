@@ -2735,7 +2735,7 @@ async function clearFirestore(){
 // ─────────────────────────────────────────────
 // USE_LOCAL: set to true to skip Firestore, use in-code test data
 // ─────────────────────────────────────────────
-const USE_LOCAL = true;
+const USE_LOCAL = false;
 
 (async function init(){
   if(!USE_LOCAL){
