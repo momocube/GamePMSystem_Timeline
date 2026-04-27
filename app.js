@@ -1250,7 +1250,7 @@ function buildTimeline(){
     const bar=document.createElement('div');bar.className='tbar';
     bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
     tr.appendChild(bar);
-    addPills(tr,t);
+    if(!exp[t.id])addPills(tr,t);
     tr.addEventListener('click',()=>{toggle(t.id);openDetailPanel(t.id);});
     rows.appendChild(tr);
 
@@ -1328,7 +1328,7 @@ function drawVinePaths(bgEl,trunk){
 function addPills(tr,trunk){
   trunk.branches.forEach(b=>{
     const p=document.createElement('div');p.className='tpill';
-    const endX=b.end?dx(b.end):dx(b.start)+120;
+    const endX=b.end?dx(b.end):(tw());
     const displayColor=b.color===trunk.color?deriveColor(b.color,trunk.branches.indexOf(b)+1):b.color;
     p.style.cssText=`left:${dx(b.start)}px;width:${endX-dx(b.start)}px;background:${displayColor}`;
     p.textContent=b.name;tr.appendChild(p);
@@ -1492,7 +1492,7 @@ function toggle(id){
   const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);
   if(tb)tb.style.height=(open?(brH+addBtnH):0)+'px';
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
-  if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());addPills(tr,t);}
+  if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());if(!open)addPills(tr,t);}
 }
 
 // ─────────────────────────────────────────────
