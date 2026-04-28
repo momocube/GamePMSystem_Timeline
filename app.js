@@ -1324,6 +1324,20 @@ function buildTimeline(){
     rows.appendChild(bg);
   });
   applyF();
+  // Sync canvas + tdline height so today-line extends to bottom of all rows
+  const syncHeight=()=>{
+    const r=document.getElementById('rows');
+    const c=document.getElementById('canvas');
+    const tl=document.getElementById('tdline');
+    if(r&&c){
+      const h=r.offsetTop+r.scrollHeight;
+      c.style.minHeight=h+'px';
+      if(tl)tl.style.height=h+'px';
+    }
+  };
+  requestAnimationFrame(syncHeight);
+  // Also sync after branch expand/collapse animations finish
+  setTimeout(syncHeight,300);
 }
 
 function drawVinePaths(bgEl,trunk){
@@ -1517,6 +1531,15 @@ function toggle(id){
   if(tb)tb.style.height=(open?(brH+addBtnH):0)+'px';
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
   if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());if(!open)addPills(tr,t);}
+  // Sync canvas + tdline height for today line
+  const syncH=()=>{
+    const r=document.getElementById('rows');
+    const c=document.getElementById('canvas');
+    const tl=document.getElementById('tdline');
+    if(r&&c){const h=r.offsetTop+r.scrollHeight;c.style.minHeight=h+'px';if(tl)tl.style.height=h+'px';}
+  };
+  requestAnimationFrame(syncH);
+  setTimeout(syncH,300);
 }
 
 // ─────────────────────────────────────────────
