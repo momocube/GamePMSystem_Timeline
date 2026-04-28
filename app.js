@@ -703,6 +703,15 @@ function buildLabels(){
   lspc.append(addTBtn,addBBtn);
   // Re-attach button listeners
   initAddButtons();
+
+  // Sync left column content height with timeline canvas to keep scroll aligned
+  requestAnimationFrame(()=>{
+    const canvas=document.getElementById('canvas');
+    if(canvas&&body){
+      const ch=canvas.scrollHeight;
+      body.style.minHeight=ch+'px';
+    }
+  });
 }
 
 // ─────────────────────────────────────────────
@@ -1334,7 +1343,7 @@ function buildTimeline(){
     rows.appendChild(bg);
   });
   applyF();
-  // Sync canvas + tdline height so today-line extends to bottom of all rows
+  // Sync canvas + tdline + lbody height so everything stays aligned
   const syncHeight=()=>{
     const r=document.getElementById('rows');
     const c=document.getElementById('canvas');
@@ -1343,6 +1352,14 @@ function buildTimeline(){
       const h=r.offsetTop+r.scrollHeight;
       c.style.minHeight=h+'px';
       if(tl)tl.style.height=h+'px';
+      // Sync lbody spacer
+      let sp=document.getElementById('lbody-spacer');
+      const lb=document.getElementById('lbody');
+      if(lb){
+        if(!sp){sp=document.createElement('div');sp.id='lbody-spacer';sp.style.cssText='flex-shrink:0;pointer-events:none;';lb.appendChild(sp);}
+        const lbContentH=[...lb.children].filter(c2=>c2.id!=='lbody-spacer').reduce((sum,c2)=>sum+c2.offsetHeight,0);
+        sp.style.height=Math.max(0,h-lbContentH)+'px';
+      }
     }
   };
   requestAnimationFrame(syncHeight);
@@ -1473,7 +1490,7 @@ function spreadOverlappingCards(brow){
     const newFirst=brow.querySelector(`.nwrap[data-id="${first.dataset.id}"]`);
     newFirst.addEventListener('click',e=>{
       e.stopPropagation();
-      showCardPicker(e, group.map(c=>parseInt(c.dataset.id)));
+      showCardPicker(e, group.map(c=>{const v=c.dataset.id;return isNaN(v)?v:Number(v);}));
     });
   });
 }
@@ -1546,7 +1563,19 @@ function toggle(id){
     const r=document.getElementById('rows');
     const c=document.getElementById('canvas');
     const tl=document.getElementById('tdline');
-    if(r&&c){const h=r.offsetTop+r.scrollHeight;c.style.minHeight=h+'px';if(tl)tl.style.height=h+'px';}
+    if(r&&c){
+      const h=r.offsetTop+r.scrollHeight;
+      c.style.minHeight=h+'px';
+      if(tl)tl.style.height=h+'px';
+      // Sync lbody spacer to match canvas height for scroll alignment
+      let sp=document.getElementById('lbody-spacer');
+      const lb=document.getElementById('lbody');
+      if(lb){
+        if(!sp){sp=document.createElement('div');sp.id='lbody-spacer';sp.style.cssText='flex-shrink:0;pointer-events:none;';lb.appendChild(sp);}
+        const lbContentH=[...lb.children].filter(c2=>c2.id!=='lbody-spacer').reduce((sum,c2)=>sum+c2.offsetHeight,0);
+        sp.style.height=Math.max(0,h-lbContentH)+'px';
+      }
+    }
   };
   requestAnimationFrame(syncH);
   setTimeout(syncH,300);
