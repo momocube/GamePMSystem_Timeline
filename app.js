@@ -605,7 +605,7 @@ function buildLabels(){
     });
 
     // Fade trunk label for done/hold
-    if(t.status==='done'||t.status==='hold'){tr.style.opacity='0.4';tr.style.filter='saturate(0.25)';}
+    if(t.status==='done'||t.status==='hold'){tr.style.opacity='0.5';tr.style.filter='saturate(0.3)';}
     const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
     const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background=t.color;
@@ -637,7 +637,7 @@ function buildLabels(){
       // Fade labels for done/hold
       const lbStatus=b.status||t.status||'todo';
       const lbPri=b.priority||t.priority||'normal';
-      if(lbStatus==='done'||lbStatus==='hold'){br.style.opacity='0.4';br.style.filter='saturate(0.25)';}
+      if(lbStatus==='done'||lbStatus==='hold'){br.style.opacity='0.5';br.style.filter='saturate(0.3)';}
       br.draggable=true;
       // Drag child branch out → becomes independent
       br.addEventListener('dragstart',e=>{
@@ -690,15 +690,18 @@ function buildLabels(){
     }
     body.appendChild(bg);
   });
-  // Add trunk/branch buttons (inside lbody so scroll heights match #sa)
-  const btnWrap=document.createElement('div');
-  btnWrap.id='add-trunk-btn-wrap';
-  btnWrap.innerHTML='<button id="add-trunk-btn" class="add-btn">+ 新增主幹</button><button id="add-branch-quick-btn" class="add-btn">+ 新增枝幹</button>';
-  body.appendChild(btnWrap);
-  // Spacer to match #ruler height inside #sa for scroll sync
-  const spacer=document.createElement('div');spacer.style.cssText='height:40px;flex-shrink:0;';
-  body.appendChild(spacer);
-  // Re-attach button listeners (elements are recreated each call)
+  // Build add buttons in #lspc (branch info header) instead of bottom
+  const lspc=document.getElementById('lspc');
+  // Remove old buttons if present
+  lspc.querySelectorAll('.lspc-add-btn').forEach(b=>b.remove());
+  const addTBtn=document.createElement('button');addTBtn.id='add-trunk-btn';addTBtn.className='lspc-add-btn';
+  addTBtn.style.cssText='margin-left:auto;padding:2px 6px;font-size:9px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text-mid);cursor:pointer;font-family:inherit;';
+  addTBtn.textContent='+ 主幹';
+  const addBBtn=document.createElement('button');addBBtn.id='add-branch-quick-btn';addBBtn.className='lspc-add-btn';
+  addBBtn.style.cssText='margin-left:4px;padding:2px 6px;font-size:9px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text-mid);cursor:pointer;font-family:inherit;';
+  addBBtn.textContent='+ 枝幹';
+  lspc.append(addTBtn,addBBtn);
+  // Re-attach button listeners
   initAddButtons();
 }
 
@@ -1260,14 +1263,21 @@ function buildTimeline(){
     const tIsFaded=t.status==='done'||t.status==='hold';
     const tIsHighest=t.priority==='highest';
     const tIsHigh=t.priority==='high';
-    if(tIsFaded){tr.style.opacity='0.4';tr.style.filter='saturate(0.3)';}
+    if(tIsFaded){tr.style.opacity='0.5';tr.style.filter='saturate(0.3)';}
     const bar=document.createElement('div');bar.className='tbar';
     bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
     if(tIsHighest){bar.dataset.pri='highest';bar.style.boxShadow='0 0 0 2px #dc2626';bar.style.borderRadius='3px';bar.style.height='6px';}
     else if(tIsHigh){bar.style.boxShadow='0 0 0 2px #f97316';bar.style.borderRadius='3px';bar.style.height='6px';}
     tr.appendChild(bar);
-    if(!exp[t.id])addPills(tr,t);
-    tr.addEventListener('click',()=>{toggle(t.id);openDetailPanel(t.id);});
+    if(!exp[t.id]){
+      addPills(tr,t);
+      // Show node bubbles on collapsed trunk row
+      const allBranchNodes=NODES.filter(n=>t.branches.some(b=>b.id===n.branch));
+      allBranchNodes.forEach(n=>addCard(n,tr));
+      spreadOverlappingCards(tr);
+      alternateCardPositions(tr);
+    }
+    tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap')){toggle(t.id);openDetailPanel(t.id);}});
     rows.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='bgroup';bg.dataset.trunk=t.id;
@@ -1282,7 +1292,7 @@ function buildTimeline(){
       const bIsFaded=bStatus==='done'||bStatus==='hold';
       const bIsHighest=bPriority==='highest';
       const bIsHigh=bPriority==='high';
-      if(bIsFaded){brow.style.opacity='0.35';brow.style.filter='saturate(0.25)';}
+      if(bIsFaded){brow.style.opacity='0.5';brow.style.filter='saturate(0.3)';}
       // stem
       const st=document.createElement('div');st.className='stem';
       st.style.cssText=`left:${dx(b.start)}px;background:${displayColor}`;brow.appendChild(st);

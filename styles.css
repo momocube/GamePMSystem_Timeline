@@ -38,7 +38,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 /* ── LAYOUT ── */
 #main{flex:1;display:flex;overflow:hidden;}
 #lcol{width:var(--lcol-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;z-index:20;position:relative;}
-#lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;}
+#lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;gap:4px;}
 #lspc-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);letter-spacing:.06em;}
 #lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;scrollbar-width:none;-ms-overflow-style:none;}
 #lbody::-webkit-scrollbar{display:none;}
@@ -368,10 +368,9 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 @keyframes urgpulse-bar{0%,100%{box-shadow:0 0 0 2px #dc2626}50%{box-shadow:0 0 8px 3px rgba(220,38,38,0.4)}}
 .tbar[data-pri="highest"],.bbar[data-pri="highest"]{animation:urgpulse-bar 2s ease infinite;}
 
-/* ── ADD TRUNK/BRANCH BUTTON ── */
-#add-trunk-btn-wrap{padding:8px 10px;flex-shrink:0;background:var(--surface);display:flex;gap:6px;position:sticky;bottom:0;z-index:5;border-top:1px solid var(--border);}
-.add-btn{flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text-mid);font-size:11px;cursor:pointer;font-family:'Noto Sans TC',sans-serif;transition:all .12s;text-align:center;}
-.add-btn:hover{background:var(--surface3);color:var(--text);}
+/* ── ADD TRUNK/BRANCH BUTTON (in lspc header) ── */
+.lspc-add-btn{transition:all .12s;}
+.lspc-add-btn:hover{background:var(--surface3) !important;color:var(--text) !important;}
 
 /* ── TRIP REPORT FORM ── */
 .trip-input,.trip-textarea{width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-family:'Noto Sans TC',sans-serif;font-size:11px;outline:none;flex-shrink:0;}
