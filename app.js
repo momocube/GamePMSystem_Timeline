@@ -629,8 +629,7 @@ function buildLabels(){
     body.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
-    const lcAddBtnH=24;
-    if(exp[t.id]){bg.classList.add('open');bg.style.height=(t.branches.length*BH()+lcAddBtnH)+'px';}else{bg.style.height='0px';}
+    if(exp[t.id]){bg.classList.add('open');bg.style.height=(t.branches.length*BH())+'px';}else{bg.style.height='0px';}
     t.branches.forEach((b,bidx)=>{
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
       const br=document.createElement('div');br.className='lc-br';
@@ -681,13 +680,6 @@ function buildLabels(){
       br.addEventListener('click',e=>{e.stopPropagation();openBranchDetail(t.id,b.id);});
       bg.appendChild(br);
     });
-    // Add branch button
-    if(exp[t.id]){
-      const addBr=document.createElement('div');addBr.className='lc-add-branch';
-      addBr.innerHTML='＋ 新增枝幹';
-      addBr.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
-      bg.appendChild(addBr);
-    }
     body.appendChild(bg);
   });
   // Build add buttons in #lspc (branch info header) instead of bottom
@@ -704,14 +696,6 @@ function buildLabels(){
   // Re-attach button listeners
   initAddButtons();
 
-  // Sync left column content height with timeline canvas to keep scroll aligned
-  requestAnimationFrame(()=>{
-    const canvas=document.getElementById('canvas');
-    if(canvas&&body){
-      const ch=canvas.scrollHeight;
-      body.style.minHeight=ch+'px';
-    }
-  });
 }
 
 // ─────────────────────────────────────────────
@@ -1290,8 +1274,8 @@ function buildTimeline(){
     rows.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='bgroup';bg.dataset.trunk=t.id;
-    const addBtnH=24;
-    bg.style.height=exp[t.id]?(t.branches.length*BH()+addBtnH)+'px':'0px';
+    bg.style.height=exp[t.id]?(t.branches.length*BH())+'px':'0px';
+    if(exp[t.id])setTimeout(()=>bg.classList.add('expanded'),280);
     t.branches.forEach((b,bidx)=>{
       const brow=document.createElement('div');brow.className='brow';brow.dataset.branch=b.id;
       const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
@@ -1343,7 +1327,7 @@ function buildTimeline(){
     rows.appendChild(bg);
   });
   applyF();
-  // Sync canvas + tdline + lbody height so everything stays aligned
+  // Sync canvas + tdline height
   const syncHeight=()=>{
     const r=document.getElementById('rows');
     const c=document.getElementById('canvas');
@@ -1352,18 +1336,9 @@ function buildTimeline(){
       const h=r.offsetTop+r.scrollHeight;
       c.style.minHeight=h+'px';
       if(tl)tl.style.height=h+'px';
-      // Sync lbody spacer
-      let sp=document.getElementById('lbody-spacer');
-      const lb=document.getElementById('lbody');
-      if(lb){
-        if(!sp){sp=document.createElement('div');sp.id='lbody-spacer';sp.style.cssText='flex-shrink:0;pointer-events:none;';lb.appendChild(sp);}
-        const lbContentH=[...lb.children].filter(c2=>c2.id!=='lbody-spacer').reduce((sum,c2)=>sum+c2.offsetHeight,0);
-        sp.style.height=Math.max(0,h-lbContentH)+'px';
-      }
     }
   };
   requestAnimationFrame(syncHeight);
-  // Also sync after branch expand/collapse animations finish
   setTimeout(syncHeight,300);
 }
 
@@ -1475,6 +1450,8 @@ function spreadOverlappingCards(brow){
   });
   Object.values(groups).forEach(group=>{
     if(group.length<2)return;
+    // Collect all node IDs before hiding
+    const nodeIds=group.map(c=>{const v=c.dataset.id;return isNaN(v)?v:Number(v);});
     // Hide all but the first card
     group.forEach((c,i)=>{
       if(i>0)c.style.display='none';
@@ -1484,14 +1461,13 @@ function spreadOverlappingCards(brow){
     const badge=document.createElement('div');
     badge.className='nwrap-badge';
     badge.textContent=group.length;
-    first.querySelector('.nav-dot').appendChild(badge);
-    // Override click to show picker
-    first.replaceWith(first.cloneNode(true));
-    const newFirst=brow.querySelector(`.nwrap[data-id="${first.dataset.id}"]`);
-    newFirst.addEventListener('click',e=>{
+    const dot=first.querySelector('.nav-dot');
+    if(dot)dot.appendChild(badge);
+    // Override click — store nodeIds in closure, no cloneNode needed
+    first.onclick=e=>{
       e.stopPropagation();
-      showCardPicker(e, group.map(c=>{const v=c.dataset.id;return isNaN(v)?v:Number(v);}));
-    });
+      showCardPicker(e, nodeIds);
+    };
   });
 }
 
@@ -1544,18 +1520,20 @@ function toggle(id){
   if(!t||t.isBranch)return; // independent branches have nothing to toggle
   exp[id]=!exp[id];const open=exp[id];
   const brH=t.branches.length*BH();
-  const addBtnH=24; // height of the "＋ 新增枝幹" button inside lc-bg
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
-  // Left column: set explicit height including add-branch button
+  // Left column
   const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);
   if(lb){
-    if(open){lb.classList.add('open');lb.style.height=(brH+addBtnH)+'px';}
+    if(open){lb.classList.add('open');lb.style.height=brH+'px';}
     else{lb.classList.remove('open');lb.style.height='0px';}
   }
-  // Timeline: set explicit height matching branch rows only (no add button there, use spacer)
+  // Timeline
   const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);
-  if(tb)tb.style.height=(open?(brH+addBtnH):0)+'px';
+  if(tb){
+    if(open){tb.style.height=brH+'px';setTimeout(()=>tb.classList.add('expanded'),280);}
+    else{tb.classList.remove('expanded');tb.style.height='0px';}
+  }
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
   if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());if(!open)addPills(tr,t);}
   // Sync canvas + tdline height for today line
@@ -1567,14 +1545,6 @@ function toggle(id){
       const h=r.offsetTop+r.scrollHeight;
       c.style.minHeight=h+'px';
       if(tl)tl.style.height=h+'px';
-      // Sync lbody spacer to match canvas height for scroll alignment
-      let sp=document.getElementById('lbody-spacer');
-      const lb=document.getElementById('lbody');
-      if(lb){
-        if(!sp){sp=document.createElement('div');sp.id='lbody-spacer';sp.style.cssText='flex-shrink:0;pointer-events:none;';lb.appendChild(sp);}
-        const lbContentH=[...lb.children].filter(c2=>c2.id!=='lbody-spacer').reduce((sum,c2)=>sum+c2.offsetHeight,0);
-        sp.style.height=Math.max(0,h-lbContentH)+'px';
-      }
     }
   };
   requestAnimationFrame(syncH);
@@ -2749,16 +2719,9 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 (()=>{
   const sa=document.getElementById('sa');
   const lb=document.getElementById('lbody');
-  let syncing=false;
+  // One-directional: #sa drives #lbody scroll (lbody overflow hidden)
   sa.addEventListener('scroll',()=>{
-    if(syncing)return;syncing=true;
     lb.scrollTop=sa.scrollTop;
-    requestAnimationFrame(()=>{syncing=false;});
-  });
-  lb.addEventListener('scroll',()=>{
-    if(syncing)return;syncing=true;
-    sa.scrollTop=lb.scrollTop;
-    requestAnimationFrame(()=>{syncing=false;});
   });
 })();
 

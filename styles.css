@@ -40,8 +40,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 #lcol{width:var(--lcol-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;z-index:20;position:relative;}
 #lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;gap:4px;}
 #lspc-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);letter-spacing:.06em;}
-#lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;scrollbar-width:none;-ms-overflow-style:none;}
-#lbody::-webkit-scrollbar{display:none;}
+#lbody{flex:1;overflow-y:hidden;overflow-x:hidden;display:flex;flex-direction:column;}
 #lcol-resize-handle{width:4px;height:100%;position:absolute;right:-2px;top:0;cursor:ew-resize;z-index:21;}
 #lcol-resize-handle:hover{background:var(--border);}
 #sa{flex:1;overflow-x:scroll;overflow-y:auto;cursor:grab;position:relative;padding-bottom:2px;}
@@ -71,6 +70,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 
 /* ── BRANCH GROUP ── */
 .bgroup{display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:height .26s cubic-bezier(.4,0,.2,1);background:var(--surface2);position:relative;}
+.bgroup.expanded{overflow:visible;}
 .bgroup-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;}
 .vine-path{fill:none;stroke-width:2;stroke-linecap:round;opacity:.6;}
 .brow{height:var(--branch-h);position:relative;flex-shrink:0;border-bottom:1px solid var(--border2);overflow:visible;}
@@ -85,7 +85,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 
 /* ── NODE CARD ── */
 .nwrap{position:absolute;top:0px;z-index:10;cursor:pointer;display:flex;align-items:flex-start;gap:3px;flex-direction:row;}
-.nwrap:hover{z-index:50;}
+.nwrap:hover{z-index:100;}
 .nwrap::before{content:'';position:absolute;top:-2px;left:0;width:2px;height:calc(100% + 4px);background:var(--border);opacity:.35;border-radius:1px;pointer-events:none;}
 .nwrap.hidden{display:none;}
 .nav-dot{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:700;border:2px solid var(--surface2);box-shadow:0 1px 4px var(--shadow2);transition:transform .13s;color:#fff;flex-shrink:0;margin-top:3px;}
