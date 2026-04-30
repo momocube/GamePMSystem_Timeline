@@ -1452,9 +1452,10 @@ function addCard(n,brow){
   // Branch name
   const bObj=branchObj(n.branch);
   const brName=bObj?bObj.name:'';
-  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div><div class="ncmsg">${displayMsg}</div>${imgH}`;
+  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div>`;
   w.append(avDot,card);
-  w.addEventListener('click',()=>openNodeModal(n.id));
+  w._nodeClick=()=>openNodeModal(n.id);
+  w.addEventListener('click',e=>{if(w._nodeClick)w._nodeClick(e);});
   brow.appendChild(w);return w;
 }
 
@@ -1485,8 +1486,8 @@ function spreadOverlappingCards(brow){
     badge.textContent=group.length;
     const dot=first.querySelector('.nav-dot');
     if(dot)dot.appendChild(badge);
-    // Override click — store nodeIds in closure, no cloneNode needed
-    first.onclick=e=>{
+    // Override click handler to show picker instead of opening modal directly
+    first._nodeClick=e=>{
       e.stopPropagation();
       showCardPicker(e, nodeIds);
     };
