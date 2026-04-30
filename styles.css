@@ -7,7 +7,7 @@
   --notion-red:#fce4e4;--notion-blue:#e3f2fd;--notion-green:#e8f5e9;
   --notion-orange:#fff3e0;--notion-purple:#f3e5f5;--notion-pink:#fce4ec;
   --shadow:rgba(0,0,0,.08);--shadow2:rgba(0,0,0,.16);
-  --DAY:44px;--trunk-h:28px;--branch-h:48px;--lcol-w:170px;
+  --DAY:110px;--trunk-h:28px;--branch-h:48px;--lcol-w:170px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:15px;font-weight:500;}
@@ -40,6 +40,9 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 #lcol{width:var(--lcol-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;z-index:20;position:relative;}
 #lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;gap:4px;}
 #lspc-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);letter-spacing:.06em;}
+#lcol-filters{display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface2);}
+.lcol-filter-sel{width:100%;padding:4px 6px;border-radius:4px;font-size:10px;font-family:'Noto Sans TC',sans-serif;border:1px solid var(--border);background:var(--surface);color:var(--text-mid);cursor:pointer;outline:none;}
+.lcol-filter-sel:hover{background:var(--surface3);}
 #lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;scrollbar-width:none;-ms-overflow-style:none;}
 #lbody::-webkit-scrollbar{display:none;}
 #lcol-resize-handle{width:4px;height:100%;position:absolute;right:-2px;top:0;cursor:ew-resize;z-index:21;}
@@ -367,6 +370,15 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 @keyframes pop{0%{transform:translateX(-50%) scale(0);opacity:0;}65%{transform:translateX(-50%) scale(1.08);}100%{transform:translateX(-50%) scale(1);opacity:1;}}
 .nwrap.new{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
 @keyframes urgpulse-bar{0%,100%{box-shadow:0 0 0 2px #dc2626}50%{box-shadow:0 0 8px 3px rgba(220,38,38,0.4)}}
+/* ── BAR DRAG HANDLES ── */
+.bar-handle{position:absolute;top:-6px;width:8px;height:calc(100% + 12px);cursor:ew-resize;z-index:5;opacity:0;transition:opacity .15s;border-radius:2px;}
+.bar-handle:hover,.bar-handle:active{opacity:1;background:rgba(25,118,210,0.4);}
+.bar-handle-l{left:-2px;}
+.bar-handle-r{right:-2px;}
+.tbar:hover .bar-handle,.bbar:hover .bar-handle{opacity:0.5;}
+.tbar,.bbar{cursor:grab;}
+.tbar:active,.bbar:active{cursor:grabbing;}
+
 .tbar[data-pri="highest"],.bbar[data-pri="highest"]{animation:urgpulse-bar 2s ease infinite;}
 
 /* ── ADD TRUNK/BRANCH BUTTON (in lspc header) ── */
@@ -443,6 +455,9 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .status-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:8px;font-weight:600;white-space:nowrap;margin-left:4px;vertical-align:middle;}
 .status-sel{font-size:8px;padding:1px 4px;border-radius:8px;border:1px solid var(--border);cursor:pointer;outline:none;max-width:60px;background:var(--surface2);color:var(--text-mid);font-family:'Noto Sans TC',sans-serif;margin-left:3px;}
 .dash-branch-row td{font-size:11px;color:var(--text-mid);}
+.dash-note-input{width:100%;min-height:36px;max-height:80px;padding:5px 8px;font-size:11px;font-family:'Noto Sans TC',sans-serif;border:1px solid transparent;border-radius:4px;background:transparent;color:#1565c0;font-weight:500;resize:vertical;outline:none;line-height:1.5;transition:border-color .15s,background .15s;}
+.dash-note-input:hover{border-color:var(--border);background:var(--surface2);}
+.dash-note-input:focus{border-color:#1565c0;background:#e3f2fd;}
 
 /* ── PRINT STYLES ── */
 @media print{

@@ -27,15 +27,6 @@
     </select>
     <button class="today-btn" id="btn-today">📍 今天</button>
     <div class="hdr-sep"></div>
-    <select class="scale-sel" id="type-filter-sel">
-      <option value="all">全部類型</option>
-      <option value="update">📝 進度回報</option>
-      <option value="milestone">🏁 里程碑</option>
-    </select>
-    <select class="scale-sel" id="owner-filter-sel">
-      <option value="all">👤 全部負責人</option>
-    </select>
-    <div class="hdr-sep"></div>
     <div id="mavs"></div>
     <button class="btn-members" id="btn-settings">⚙️ 設定</button>
   </div>
@@ -43,6 +34,16 @@
 <div id="main">
   <div id="lcol">
     <div id="lspc"><span id="lspc-label">BRANCH INFO</span></div>
+    <div id="lcol-filters">
+      <select class="lcol-filter-sel" id="type-filter-sel">
+        <option value="all">全部類型</option>
+        <option value="update">📝 進度回報</option>
+        <option value="milestone">🏁 里程碑</option>
+      </select>
+      <select class="lcol-filter-sel" id="owner-filter-sel">
+        <option value="all">👤 全部負責人</option>
+      </select>
+    </div>
     <div id="lbody"></div>
     <div id="lcol-resize-handle"></div>
   </div>

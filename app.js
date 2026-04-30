@@ -36,8 +36,8 @@ function recalcTimeRange(){
     START=min; END=max;
   }
 }
-const BASE_DP = 44;
-let DP = 44;
+const BASE_DP = 110;
+let DP = 110;
 
 let MEMBERS = [
   {id:'M',name:'Momo',color:'#1976d2'},
@@ -245,7 +245,8 @@ function startRealtimeSync() {
     db.collection('nodes').orderBy('date','desc').onSnapshot(snap => {
       if (snap.metadata.hasPendingWrites) return;
       NODES.length = 0;
-      snap.docs.forEach(d => { const n = d.data(); n.id = isNaN(n.id) ? n.id : Number(n.id); NODES.push(n); });
+      const seenIds = new Set();
+      snap.docs.forEach(d => { const n = d.data(); n.id = isNaN(n.id) ? n.id : Number(n.id); if(seenIds.has(String(n.id)))return; seenIds.add(String(n.id)); NODES.push(n); });
       NC = NODES.reduce((mx, n) => Math.max(mx, typeof n.id === 'number' ? n.id : 0), NC);
       recalcTimeRange();buildTimeline();
     }),
@@ -1303,6 +1304,11 @@ function buildTimeline(){
     bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
     if(tIsHighest){bar.dataset.pri='highest';bar.style.boxShadow='0 0 0 2px #dc2626';bar.style.borderRadius='3px';bar.style.height='6px';}
     else if(tIsHigh){bar.style.boxShadow='0 0 0 2px #f97316';bar.style.borderRadius='3px';bar.style.height='6px';}
+    // Drag handles on trunk bar
+    const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
+    const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
+    bar.appendChild(tLH);bar.appendChild(tRH);
+    setupBarDrag(bar,t,t,'trunk');
     tr.appendChild(bar);
     if(!exp[t.id]){
       addPills(tr,t);
@@ -1355,6 +1361,12 @@ function buildTimeline(){
       // Priority left-border accent on bar
       if(bIsHighest){bb.dataset.pri='highest';bb.style.borderLeft='4px solid #dc2626';bb.style.borderRadius='3px';bb.style.boxShadow='0 0 6px rgba(220,38,38,0.3)';}
       else if(bIsHigh){bb.style.borderLeft='4px solid #f97316';bb.style.borderRadius='3px';}
+      // Drag handles on bar
+      const lHandle=document.createElement('div');lHandle.className='bar-handle bar-handle-l';
+      const rHandle=document.createElement('div');rHandle.className='bar-handle bar-handle-r';
+      bb.appendChild(lHandle);bb.appendChild(rHandle);
+      bb.style.position='absolute'; // ensure absolute
+      setupBarDrag(bb,b,t,'branch');
       brow.appendChild(bb);
       NODES.filter(n=>n.branch===b.id).forEach(n=>addCard(n,brow));
       // Fan out overlapping cards on the same date
@@ -1535,6 +1547,97 @@ function showCardPicker(e, nodeIds){
     const close=ev=>{if(!picker.contains(ev.target)){picker.remove();document.removeEventListener('click',close);}};
     document.addEventListener('click',close);
   },10);
+}
+
+// ─────────────────────────────────────────────
+// BAR DRAG (adjust start/end dates by dragging handles)
+// ─────────────────────────────────────────────
+function pxToDate(px){
+  const days=px/DP;
+  const d=new Date(START.getTime()+days*86400000);
+  return d.toISOString().slice(0,10);
+}
+function setupBarDrag(barEl,dataObj,trunk,kind){
+  const lH=barEl.querySelector('.bar-handle-l');
+  const rH=barEl.querySelector('.bar-handle-r');
+  if(!lH||!rH)return;
+  function startDrag(edge,e){
+    e.preventDefault();e.stopPropagation();
+    const sa=document.getElementById('sa');
+    const startX=e.clientX+sa.scrollLeft;
+    const origLeft=parseFloat(barEl.style.left);
+    const origWidth=parseFloat(barEl.style.width)||barEl.offsetWidth;
+    document.body.style.cursor='ew-resize';document.body.style.userSelect='none';
+    barEl.style.opacity='1';barEl.style.zIndex='10';
+    const onMove=ev=>{
+      const curX=ev.clientX+sa.scrollLeft;
+      const delta=curX-startX;
+      if(edge==='left'){
+        const newLeft=origLeft+delta;
+        const newWidth=origWidth-delta;
+        if(newWidth>10){barEl.style.left=newLeft+'px';barEl.style.width=newWidth+'px';}
+      }else{
+        const newWidth=origWidth+delta;
+        if(newWidth>10)barEl.style.width=newWidth+'px';
+      }
+    };
+    const onUp=ev=>{
+      document.body.style.cursor='';document.body.style.userSelect='';
+      window.removeEventListener('mousemove',onMove);
+      window.removeEventListener('mouseup',onUp);
+      barEl.style.opacity='';barEl.style.zIndex='';
+      // Calculate new dates
+      const finalLeft=parseFloat(barEl.style.left);
+      const finalWidth=parseFloat(barEl.style.width)||barEl.offsetWidth;
+      const newStart=pxToDate(finalLeft);
+      const newEnd=pxToDate(finalLeft+finalWidth);
+      dataObj.start=newStart;
+      if(dataObj.end||kind==='trunk')dataObj.end=newEnd;
+      if(kind==='trunk')saveTrunk(trunk);
+      else{saveTrunk(trunk);}
+      // Rebuild
+      recalcTimeRange();buildLabels();buildTimeline();updateHeaderRange();
+      // Suppress click
+      const suppress=ev2=>{ev2.stopPropagation();ev2.preventDefault();};
+      barEl.closest('.brow,.trow')?.addEventListener('click',suppress,{capture:true,once:true});
+    };
+    window.addEventListener('mousemove',onMove);
+    window.addEventListener('mouseup',onUp);
+  }
+  lH.addEventListener('mousedown',e=>startDrag('left',e));
+  rH.addEventListener('mousedown',e=>startDrag('right',e));
+  // Also support dragging the bar body (move both start+end)
+  barEl.addEventListener('mousedown',e=>{
+    if(e.target.classList.contains('bar-handle'))return;
+    e.preventDefault();e.stopPropagation();
+    const sa=document.getElementById('sa');
+    const startX=e.clientX+sa.scrollLeft;
+    const origLeft=parseFloat(barEl.style.left);
+    const barWidth=parseFloat(barEl.style.width)||barEl.offsetWidth;
+    document.body.style.cursor='grab';document.body.style.userSelect='none';
+    let moved=false;
+    const onMove=ev=>{
+      moved=true;
+      const curX=ev.clientX+sa.scrollLeft;
+      const delta=curX-startX;
+      barEl.style.left=(origLeft+delta)+'px';
+    };
+    const onUp=()=>{
+      document.body.style.cursor='';document.body.style.userSelect='';
+      window.removeEventListener('mousemove',onMove);
+      window.removeEventListener('mouseup',onUp);
+      if(!moved)return;
+      const finalLeft=parseFloat(barEl.style.left);
+      dataObj.start=pxToDate(finalLeft);
+      if(dataObj.end||kind==='trunk')dataObj.end=pxToDate(finalLeft+barWidth);
+      saveTrunk(trunk);
+      recalcTimeRange();buildLabels();buildTimeline();updateHeaderRange();
+      const suppress=ev2=>{ev2.stopPropagation();ev2.preventDefault();};
+      barEl.closest('.brow,.trow')?.addEventListener('click',suppress,{capture:true,once:true});
+    };
+    window.addEventListener('mousemove',onMove);
+    window.addEventListener('mouseup',onUp);
+  });
 }
 
 function alternateCardPositions(brow){
@@ -1981,7 +2084,7 @@ function buildDashboard(){
   const table=document.createElement('table');table.className='dash-table';
   const thead=document.createElement('thead');
   const htr=document.createElement('tr');
-  ['','專案/枝幹','狀態','優先度','負責人','協作者','開始','截止','進度','節點數','最新回報'].forEach(h=>{
+  ['','專案/枝幹','狀態','優先度','負責人','協作者','開始','截止','進度','節點數','專案狀況'].forEach(h=>{
     const th=document.createElement('th');th.textContent=h;htr.appendChild(th);
   });
   thead.appendChild(htr);table.appendChild(thead);
@@ -2029,14 +2132,19 @@ function buildDashboard(){
     // Node count
     const nodeTd=document.createElement('td');nodeTd.style.textAlign='center';
     nodeTd.textContent=NODES.filter(n=>n.trunk===t.id).length;tr.appendChild(nodeTd);
-    // Latest message
-    const latestTd=document.createElement('td');
-    const tNodes=NODES.filter(n=>n.trunk===t.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    if(tNodes.length>0){
-      const ln=tNodes[0];const lm=mem(ln.member);
-      latestTd.innerHTML=`<div class="dash-latest-msg"><span style="font-size:10px;color:var(--text-dim);font-family:'DM Mono',monospace;">${ln.date}</span> <strong style="font-size:10px;">${lm.name}</strong>: ${ln.msg}</div>`;
-    }else{latestTd.innerHTML='<span style="color:var(--text-dim);font-size:10px;">尚無回報</span>';}
-    tr.appendChild(latestTd);
+    // Editable status note for trunk
+    const noteTd=document.createElement('td');noteTd.style.cssText='min-width:200px;';
+    const noteArea=document.createElement('textarea');
+    noteArea.className='dash-note-input';
+    noteArea.value=t.statusNote||'';
+    noteArea.placeholder='填寫專案狀況…';
+    noteArea.addEventListener('click',e=>e.stopPropagation());
+    noteArea.addEventListener('blur',()=>{
+      t.statusNote=noteArea.value;
+      saveTrunk(t);
+    });
+    noteTd.appendChild(noteArea);
+    tr.appendChild(noteTd);
     tbody.appendChild(tr);
 
     // Branch sub-rows (initially hidden)
@@ -2067,8 +2175,8 @@ function buildDashboard(){
       const bpTd=document.createElement('td');bpTd.style.textAlign='center';bpTd.innerHTML=`<span style="font-size:10px;">${b.prog}%</span>`;btr.appendChild(bpTd);
       // node count
       const bnTd=document.createElement('td');bnTd.style.textAlign='center';bnTd.textContent=NODES.filter(n=>n.branch===b.id).length;btr.appendChild(bnTd);
-      // latest
-      const blTd=document.createElement('td');
+      // latest node comment for branch
+      const blTd=document.createElement('td');blTd.style.minWidth='200px';
       const bNodes=NODES.filter(n=>n.branch===b.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
       if(bNodes.length>0){const ln=bNodes[0];const lm=mem(ln.member);blTd.innerHTML=`<div class="dash-latest-msg"><span style="font-size:9px;color:var(--text-dim);">${ln.date}</span> ${lm.name}: ${ln.msg}</div>`;}
       else blTd.innerHTML='<span style="color:var(--text-dim);font-size:9px;">—</span>';
@@ -2116,9 +2224,8 @@ function getDashData(){
     const collabs=(t.collaborators||[]).map(c=>mem(c).name).join(', ');
     const avgProg=t.branches.length>0?Math.round(t.branches.reduce((s,b)=>s+b.prog,0)/t.branches.length):0;
     const nodeCount=NODES.filter(n=>n.trunk===t.id).length;
-    const tNodes=NODES.filter(n=>n.trunk===t.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
-    const latest=tNodes.length>0?`${tNodes[0].date} ${mem(tNodes[0].member).name}: ${tNodes[0].msg}`:'';
-    rows.push({type:'trunk',name:t.name,status:st.label,priority:pri.label,owner,collabs,start:t.start,end:t.end||'∞',prog:avgProg+'%',nodes:nodeCount,latest});
+    const noteText=t.statusNote||'';
+    rows.push({type:'trunk',name:t.name,status:st.label,priority:pri.label,owner,collabs,start:t.start,end:t.end||'∞',prog:avgProg+'%',nodes:nodeCount,latest:noteText});
     t.branches.forEach(b=>{
       const reporters=[...new Set(NODES.filter(n=>n.branch===b.id).map(n=>mem(n.member).name))].join(', ');
       const bNodeCount=NODES.filter(n=>n.branch===b.id).length;
@@ -2132,7 +2239,7 @@ function getDashData(){
 
 document.getElementById('dash-export-xlsx').addEventListener('click',()=>{
   if(typeof XLSX==='undefined'){alert('SheetJS 載入失敗，請檢查網路連線');return;}
-  const header=['專案/枝幹','狀態','優先度','負責人','協作者','開始','截止','進度','節點數','最新回報'];
+  const header=['專案/枝幹','狀態','優先度','負責人','協作者','開始','截止','進度','節點數','專案狀況'];
   const data=getDashData().map(r=>[r.name,r.status,r.priority,r.owner,r.collabs,r.start,r.end,r.prog,r.nodes,r.latest]);
   const wsData=[
     ['專案總表 — '+getWeekRangeStr()],
@@ -2708,7 +2815,7 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 
   sa.addEventListener('mousedown',e=>{
     // Don't intercept clicks on interactive elements
-    if(e.target.closest('.nwrap'))return;
+    if(e.target.closest('.nwrap')||e.target.closest('.bar-handle')||e.target.closest('.tbar')||e.target.closest('.bbar'))return;
     down=true;moved=false;sx=e.clientX;sy=e.clientY;sl=sa.scrollLeft;st=sa.scrollTop;
   });
 
