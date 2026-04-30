@@ -455,6 +455,16 @@ function buildSelects(){
     const o=document.createElement('option');o.value=m.id;o.textContent=m.name;rp.appendChild(o);
   });
   buildCollabPicks();
+  // Report type dropdown
+  const rtSel=document.getElementById('rp-type');
+  if(rtSel){
+    const prevType=rtSel.value;
+    rtSel.innerHTML='';
+    REPORT_TYPES.forEach(rt=>{
+      const o=document.createElement('option');o.value=rt.id;o.textContent=rt.label;rtSel.appendChild(o);
+    });
+    if(prevType)rtSel.value=prevType;
+  }
   // Pre-fill date
   const msdate=document.getElementById('msdate');
   if(msdate&&!msdate.value)msdate.value=todayStr;
@@ -513,6 +523,24 @@ function updateHeaderRange(){
 // ─────────────────────────────────────────────
 // LEFT COLUMN (with drag reorder)
 // ─────────────────────────────────────────────
+// Shared height sync: keeps lbody scrollable area = canvas height
+function syncScrollHeights(){
+  requestAnimationFrame(()=>{
+    const canvas=document.getElementById('canvas');
+    const lb=document.getElementById('lbody');
+    const tl=document.getElementById('tdline');
+    const r=document.getElementById('rows');
+    if(!canvas||!lb||!r)return;
+    const h=r.offsetTop+r.scrollHeight;
+    canvas.style.minHeight=h+'px';
+    if(tl)tl.style.height=h+'px';
+    // Add/update spacer in lbody to match canvas height
+    let sp=document.getElementById('lbody-hspacer');
+    if(!sp){sp=document.createElement('div');sp.id='lbody-hspacer';sp.style.cssText='flex-shrink:0;pointer-events:none;width:1px;';lb.appendChild(sp);}
+    const lbNatural=[...lb.children].filter(c=>c.id!=='lbody-hspacer').reduce((s,c)=>s+c.offsetHeight,0);
+    sp.style.height=Math.max(0,h-lbNatural)+'px';
+  });
+}
 let dragTrunkIdx=null;
 function buildLabels(){
   const body=document.getElementById('lbody');body.innerHTML='';
@@ -695,7 +723,9 @@ function buildLabels(){
   lspc.append(addTBtn,addBBtn);
   // Re-attach button listeners
   initAddButtons();
-
+  // Sync scroll heights after DOM settles
+  syncScrollHeights();
+  setTimeout(syncScrollHeights,300);
 }
 
 // ─────────────────────────────────────────────
@@ -1327,19 +1357,8 @@ function buildTimeline(){
     rows.appendChild(bg);
   });
   applyF();
-  // Sync canvas + tdline height
-  const syncHeight=()=>{
-    const r=document.getElementById('rows');
-    const c=document.getElementById('canvas');
-    const tl=document.getElementById('tdline');
-    if(r&&c){
-      const h=r.offsetTop+r.scrollHeight;
-      c.style.minHeight=h+'px';
-      if(tl)tl.style.height=h+'px';
-    }
-  };
-  requestAnimationFrame(syncHeight);
-  setTimeout(syncHeight,300);
+  syncScrollHeights();
+  setTimeout(syncScrollHeights,300);
 }
 
 function drawVinePaths(bgEl,trunk){
@@ -1430,7 +1449,10 @@ function addCard(n,brow){
     if(nLinks.length>2)linkH+=`<div style="font-size:8px;color:var(--text-dim);">+${nLinks.length-2} 連結</div>`;
     linkH+='</div>';
   }
-  card.innerHTML=`<div class="ncwho" style="color:${tc.accent}">${icon} <span class="ncdate">${fmt(n.date)}</span></div><div class="ncmsg">${displayMsg}</div>${collabH}${linkH}${imgH}`;
+  // Branch name
+  const bObj=branchObj(n.branch);
+  const brName=bObj?bObj.name:'';
+  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div><div class="ncmsg">${displayMsg}</div>${imgH}`;
   w.append(avDot,card);
   w.addEventListener('click',()=>openNodeModal(n.id));
   brow.appendChild(w);return w;
@@ -1536,19 +1558,8 @@ function toggle(id){
   }
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
   if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());if(!open)addPills(tr,t);}
-  // Sync canvas + tdline height for today line
-  const syncH=()=>{
-    const r=document.getElementById('rows');
-    const c=document.getElementById('canvas');
-    const tl=document.getElementById('tdline');
-    if(r&&c){
-      const h=r.offsetTop+r.scrollHeight;
-      c.style.minHeight=h+'px';
-      if(tl)tl.style.height=h+'px';
-    }
-  };
-  requestAnimationFrame(syncH);
-  setTimeout(syncH,300);
+  syncScrollHeights();
+  setTimeout(syncScrollHeights,300);
 }
 
 // ─────────────────────────────────────────────
@@ -2193,7 +2204,8 @@ document.getElementById('subbt').addEventListener('click',()=>{
   const dateStr=di||todayStr;
   let tid=trunkForBranch(bid);
   const nodeLinks=[...pendLinks];
-  const nn={id:++NC,trunk:tid,branch:bid,type:'update',date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
+  const rpType=(document.getElementById('rp-type')?.value)||'update';
+  const nn={id:++NC,trunk:tid,branch:bid,type:rpType,date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
   NODES.push(nn);saveNode(nn);pendImgs=[];pendLinks=[];renderPendPrev();renderPendLinks();
   if(!exp[tid]){exp[tid]=true;}
   buildLabels();buildTimeline();
@@ -2719,9 +2731,16 @@ document.getElementById('wk-next').addEventListener('click',()=>{wkOffset++;buil
 (()=>{
   const sa=document.getElementById('sa');
   const lb=document.getElementById('lbody');
-  // One-directional: #sa drives #lbody scroll (lbody overflow hidden)
+  let syncing=false;
   sa.addEventListener('scroll',()=>{
+    if(syncing)return;syncing=true;
     lb.scrollTop=sa.scrollTop;
+    requestAnimationFrame(()=>{syncing=false;});
+  });
+  lb.addEventListener('scroll',()=>{
+    if(syncing)return;syncing=true;
+    sa.scrollTop=lb.scrollTop;
+    requestAnimationFrame(()=>{syncing=false;});
   });
 })();
 
