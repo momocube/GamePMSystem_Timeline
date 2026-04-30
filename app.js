@@ -505,7 +505,19 @@ function buildCollabPicks(){
 // OWNER FILTER
 // ─────────────────────────────────────────────
 function buildOwnerFilter(){
-  activeOwner='all';
+  const sel=document.getElementById('owner-filter-sel');
+  if(!sel)return;
+  const prev=sel.value||activeOwner;
+  sel.innerHTML='';
+  const allOpt=document.createElement('option');allOpt.value='all';allOpt.textContent='👤 全部負責人';sel.appendChild(allOpt);
+  const owners=[...new Set(TRUNKS.map(t=>t.owner).filter(Boolean))];
+  owners.forEach(oid=>{
+    const m=mem(oid);
+    const o=document.createElement('option');o.value=oid;o.textContent=m.name;sel.appendChild(o);
+  });
+  // Restore previous selection if still valid
+  if(owners.includes(prev)||prev==='all'){sel.value=prev;activeOwner=prev;}
+  else{sel.value='all';activeOwner='all';}
 }
 
 // ─────────────────────────────────────────────
@@ -1580,6 +1592,11 @@ function applyF(){
 document.getElementById('type-filter-sel').addEventListener('change',function(){
   activeType=this.value;
   applyF();
+});
+
+document.getElementById('owner-filter-sel').addEventListener('change',function(){
+  activeOwner=this.value;
+  buildLabels();buildTimeline();
 });
 
 // ─────────────────────────────────────────────
