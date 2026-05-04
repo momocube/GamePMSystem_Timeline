@@ -655,15 +655,11 @@ function buildLabels(){
       dragTrunkIdx=null;
     });
 
-    // Fade trunk label for done/hold
-    if(t.status==='done'||t.status==='hold'){tr.style.opacity='0.5';tr.style.filter='saturate(0.3)';}
+    // Trunk label: always neutral gray (status derived from branches, not shown on trunk)
     const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
-    const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background=t.color;
-    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color=t.color;nm.textContent=t.name;
-    // Priority indicator on trunk name
-    if(t.priority==='highest'){const pi=document.createElement('span');pi.textContent='🔥';pi.style.cssText='font-size:10px;margin-left:3px;';tr.dataset.pri='highest';nm.after(pi);}
-    else if(t.priority==='high'){const pi=document.createElement('span');pi.textContent='⚡';pi.style.cssText='font-size:10px;margin-left:3px;';nm.after(pi);}
+    const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background='#b0b0b0';
+    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color='#666';nm.textContent=t.name;
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
     tr.append(drag,ca,dt,nm,addBrBtn);
@@ -1305,13 +1301,9 @@ function buildTimeline(){
     // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='trow';tr.dataset.trunk=t.id;
     // Trunk status derived from branches
-    const tDerived=deriveTrunkStatus(t);
-    const tIsFaded=tDerived.id==='done'||tDerived.id==='hold';
-    if(tIsFaded){tr.style.opacity='0.5';tr.style.filter='saturate(0.3)';}
-    // Trunk bar: gray when collapsed (no own status), derived status color when expanded
-    const trunkBarColor=exp[t.id]?tDerived.color:'#c0c0c0';
+    // Trunk bar: always neutral gray (branches carry status color)
     const bar=document.createElement('div');bar.className='tbar';
-    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${trunkBarColor}`;
+    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#c0c0c0`;
     // Drag handles on trunk bar
     const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
     const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
