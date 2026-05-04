@@ -746,11 +746,9 @@ function buildLabels(){
     // Trunk label: always neutral gray (status derived from branches, not shown on trunk)
     const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
-    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color='var(--text)';nm.textContent=t.name;
-    // High priority red glow on trunk name
-    if(t.priority==='highest'||t.priority==='high'){
-      tr.classList.add('lc-trunk-urgent');
-    }
+    const isUrgent=t.priority==='highest'||t.priority==='high';
+    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color=isUrgent?'#dc2626':'var(--text)';nm.textContent=t.name;
+    if(isUrgent) tr.classList.add('lc-trunk-urgent');
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
     tr.append(drag,ca,nm,addBrBtn);
@@ -1344,9 +1342,12 @@ function buildTimeline(){
     // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='trow';tr.dataset.trunk=t.id;
     // Trunk status derived from branches
-    // Trunk bar: always neutral gray (branches carry status color)
+    // Trunk bar: neutral or red for urgent
+    const tIsUrgent=t.priority==='highest'||t.priority==='high';
     const bar=document.createElement('div');bar.className='tbar';
-    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1`;
+    bar.style.cssText=tIsUrgent
+      ?`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#dc2626;border:1.5px solid #b91c1c;opacity:.85`
+      :`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1`;
     // Drag handles on trunk bar
     const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
     const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
