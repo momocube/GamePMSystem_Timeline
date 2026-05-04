@@ -69,13 +69,13 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .day-col-holiday{background:rgba(220,38,38,0.06);}
 
 /* ── TRUNK ROW ── */
-.trow{height:32px;position:relative;flex-shrink:0;border-bottom:1px solid var(--border2);display:flex;align-items:center;cursor:pointer;background:var(--surface);}
-.trow:hover{background:var(--surface2);}
+.trow{height:32px;position:relative;flex-shrink:0;border-bottom:1px solid var(--border2);display:flex;align-items:center;cursor:pointer;background:transparent;}
+.trow:hover{background:rgba(0,0,0,0.03);}
 .tbar{position:absolute;height:8px;border-radius:4px;top:50%;transform:translateY(-50%);opacity:.9;}
 .tpill{position:absolute;top:50%;transform:translateY(-50%);height:20px;border-radius:4px;display:flex;align-items:center;padding:0 8px;font-size:9px;font-weight:600;white-space:nowrap;pointer-events:none;color:#fff;opacity:.75;}
 
 /* ── BRANCH GROUP ── */
-.bgroup{display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:height .26s cubic-bezier(.4,0,.2,1);background:var(--surface2);position:relative;}
+.bgroup{display:flex;flex-direction:column;flex-shrink:0;overflow:hidden;transition:height .26s cubic-bezier(.4,0,.2,1);background:transparent;position:relative;}
 .bgroup.expanded{overflow:visible;}
 .bgroup-svg{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2;}
 .vine-path{fill:none;stroke-width:2;stroke-linecap:round;opacity:.6;}
