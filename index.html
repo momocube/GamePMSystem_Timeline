@@ -32,9 +32,14 @@
     <button class="today-btn" id="btn-today">📍 今天</button>
     <div class="hdr-sep"></div>
     <div id="mavs"></div>
+    <div class="hdr-notify" id="hdr-notify">
+      <button class="notify-bell" id="notify-bell">🔔</button>
+      <span class="notify-badge" id="notify-badge" style="display:none;">0</span>
+    </div>
     <button class="btn-members" id="btn-settings">⚙️ 設定</button>
   </div>
 </header>
+<div class="notify-panel" id="notify-panel" style="display:none;"></div>
 <div id="main">
   <div id="lcol">
     <div id="lspc"><span id="lspc-label">BRANCH INFO</span></div>
@@ -144,6 +149,11 @@
             <div id="nmod-view-images" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
             <div id="nmod-view-links" style="margin-top:6px;display:flex;flex-direction:column;gap:3px;"></div>
           </div>
+        </div>
+        <div id="nmod-replies" class="nmod-replies-section"></div>
+        <div class="nmod-reply-input">
+          <textarea id="nmod-reply-text" placeholder="回覆… (輸入 @ 標註成員)" rows="2"></textarea>
+          <button id="nmod-reply-submit" class="nmod-reply-btn">回覆</button>
         </div>
         <div class="nmod-meta">
           <div class="nmod-date" id="nmod-date"></div>

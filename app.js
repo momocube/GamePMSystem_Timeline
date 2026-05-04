@@ -101,6 +101,10 @@ let REPORT_TYPES = [
 ];
 function reportTypeObj(id){ return REPORT_TYPES.find(r=>r.id===id)||REPORT_TYPES[0]; }
 
+// Mentions & notifications
+let MENTIONS = [];
+const DISCORD_WEBHOOK = 'https://discord.com/api/webhooks/1499338536732721152/TsKWMFxJ5lhjLawN9AMKxZ0ZsjLbQvnunulWg9P6aUMJcyRM404IKp69oojSno-wgL4o';
+
 // Taiwan holidays & make-up workdays (補班日)
 const TW_HOLIDAYS = {
   '2024-01-01':'元旦','2024-02-08':'除夕','2024-02-09':'春節','2024-02-10':'春節',
@@ -232,6 +236,12 @@ async function loadFromFirestore() {
     const catDoc = await db.collection('settings').doc('categories').get();
     if (catDoc.exists) { const items = catDoc.data().items; if (items && items.length) CATS.length = 0; items.forEach(c => CATS.push(c)); }
 
+    const mentionSnap = await db.collection('mentions').get();
+    if (!mentionSnap.empty) {
+      MENTIONS.length = 0;
+      mentionSnap.docs.forEach(d => MENTIONS.push({ id: d.id, ...d.data() }));
+    }
+
     return true;
   } catch (e) {
     console.warn('Firestore load error:', e);
@@ -270,6 +280,12 @@ function startRealtimeSync() {
       DAILY_REPORTS.length = 0;
       snap.docs.forEach(d => DAILY_REPORTS.push({ id: d.id, ...d.data() }));
       if (document.getElementById('weekly-panel').style.display === 'flex') buildWeekly();
+    }),
+    db.collection('mentions').onSnapshot(snap => {
+      if (snap.metadata.hasPendingWrites) return;
+      MENTIONS.length = 0;
+      snap.docs.forEach(d => MENTIONS.push({ id: d.id, ...d.data() }));
+      updateNotifyBadge();
     })
   );
 }
@@ -375,6 +391,60 @@ function deriveColor(baseHex,idx){
   const newL=Math.min(80,hsl.l+idx*6);
   const newS=Math.max(20,hsl.s-idx*3);
   return hslToHex(hsl.h,newS,newL);
+}
+
+// ─────────────────────────────────────────────
+// MENTIONS & REPLIES
+// ─────────────────────────────────────────────
+function parseMentions(text) {
+  const regex = /@(\w+)/g;
+  const mentions = [];
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const name = match[1];
+    const member = MEMBERS.find(m => m.name === name);
+    if (member) mentions.push(member.id);
+  }
+  return [...new Set(mentions)];
+}
+
+function renderMentionText(text) {
+  const span = document.createElement('span');
+  const regex = /(@\w+)/g;
+  const parts = text.split(regex);
+  parts.forEach(part => {
+    if (part.startsWith('@')) {
+      const name = part.substring(1);
+      const member = MEMBERS.find(m => m.name === name);
+      if (member) {
+        const hl = document.createElement('span');
+        hl.className = 'mention-highlight';
+        hl.textContent = part;
+        span.appendChild(hl);
+      } else {
+        span.appendChild(document.createTextNode(part));
+      }
+    } else {
+      span.appendChild(document.createTextNode(part));
+    }
+  });
+  return span;
+}
+
+async function sendDiscordMention(fromName, toName, branchName, msg, nodeId) {
+  const appUrl = window.location.origin + window.location.pathname;
+  const link = `${appUrl}?node=${nodeId}`;
+  const body = {
+    content: `📌 **${fromName}** 在【${branchName}】標註了 **${toName}**\n> ${msg.substring(0, 100)}${msg.length > 100 ? '…' : ''}\n🔗 [查看留言](${link})`
+  };
+  try {
+    await fetch(DISCORD_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (e) { console.warn('Discord webhook error:', e); }
+}
+
+function saveMention(mention) {
+  const docId = `${mention.nodeId}_${mention.toMember}_${mention.date}`;
+  fsave('mentions', docId, mention);
 }
 
 // ─────────────────────────────────────────────
@@ -1429,7 +1499,11 @@ function addCard(n,brow){
   // Branch name
   const bObj=branchObj(n.branch);
   const brName=bObj?bObj.name:'';
-  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div>`;
+  let replyBadgeHTML = '';
+  if (n.replies && n.replies.length > 0) {
+    replyBadgeHTML = `<div style="font-size:8px;color:var(--text-dim);margin-top:3px;">💬 ${n.replies.length}</div>`;
+  }
+  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div>${imgH}${collabH}${linkH}${replyBadgeHTML}`;
   w.append(avDot,card);
   w._nodeClick=()=>openNodeModal(n.id);
   w.addEventListener('click',e=>{if(w._nodeClick)w._nodeClick(e);});
@@ -1652,6 +1726,252 @@ const _ownerFSel=document.getElementById('owner-filter-sel');
 if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;buildLabels();buildTimeline();});
 
 // ─────────────────────────────────────────────
+// NOTIFICATION BELL & MENTIONS
+// ─────────────────────────────────────────────
+function updateNotifyBadge() {
+  const todayMentions = MENTIONS.filter(m => m.date === todayStr);
+  const badge = document.getElementById('notify-badge');
+  if (todayMentions.length > 0) {
+    badge.textContent = todayMentions.length;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function renderNotifyPanel() {
+  const panel = document.getElementById('notify-panel');
+  const todayMentions = MENTIONS.filter(m => m.date === todayStr);
+
+  if (todayMentions.length === 0) {
+    panel.innerHTML = '<div class="notify-empty">今天沒有提及</div>';
+    return;
+  }
+
+  panel.innerHTML = '';
+  todayMentions.forEach(m => {
+    const item = document.createElement('div');
+    item.className = 'notify-item' + (m.read ? '' : ' unread');
+    const fromMember = mem(m.fromMember);
+    const toMember = mem(m.toMember);
+    const branch = branchObj(m.branchName) || { name: m.branchName };
+
+    const whoDiv = document.createElement('div');
+    whoDiv.className = 'notify-item-who';
+    whoDiv.textContent = `${fromMember.name} → ${toMember.name}`;
+
+    const textDiv = document.createElement('div');
+    textDiv.className = 'notify-item-text';
+    textDiv.textContent = m.msg.substring(0, 60) + (m.msg.length > 60 ? '…' : '');
+
+    const branchDiv = document.createElement('div');
+    branchDiv.className = 'notify-item-branch';
+    branchDiv.textContent = `在 ${branch.name}`;
+
+    item.appendChild(whoDiv);
+    item.appendChild(textDiv);
+    item.appendChild(branchDiv);
+
+    item.addEventListener('click', () => {
+      if (!m.read) {
+        m.read = true;
+        fsave('mentions', m.id, m);
+      }
+      document.getElementById('notify-panel').style.display = 'none';
+      openNodeModal(m.nodeId);
+    });
+
+    panel.appendChild(item);
+  });
+}
+
+document.getElementById('notify-bell').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const panel = document.getElementById('notify-panel');
+  if (panel.style.display === 'none' || !panel.style.display) {
+    renderNotifyPanel();
+    panel.style.display = 'flex';
+  } else {
+    panel.style.display = 'none';
+  }
+});
+
+document.addEventListener('click', (e) => {
+  const panel = document.getElementById('notify-panel');
+  const bell = document.getElementById('notify-bell');
+  if (!panel.contains(e.target) && e.target !== bell) {
+    panel.style.display = 'none';
+  }
+});
+
+// ─────────────────────────────────────────────
+// REPLY THREADS
+// ─────────────────────────────────────────────
+function renderReplies(n) {
+  const repliesContainer = document.getElementById('nmod-replies');
+  repliesContainer.innerHTML = '';
+
+  // Show existing replies
+  if (n.replies && n.replies.length > 0) {
+    n.replies.forEach(reply => {
+      const replyDiv = document.createElement('div');
+      replyDiv.className = 'nmod-reply-item';
+
+      const replyMem = mem(reply.member);
+      const av = document.createElement('div');
+      av.className = 'nmod-reply-av';
+      av.style.background = replyMem.color;
+      av.textContent = initials(replyMem.name);
+
+      const content = document.createElement('div');
+      content.className = 'nmod-reply-content';
+
+      const who = document.createElement('div');
+      who.className = 'nmod-reply-who';
+      who.textContent = replyMem.name;
+
+      const time = document.createElement('div');
+      time.className = 'nmod-reply-time';
+      time.textContent = reply.date || todayStr;
+
+      const msg = document.createElement('div');
+      msg.className = 'nmod-reply-msg';
+      msg.appendChild(renderMentionText(reply.msg));
+
+      content.appendChild(who);
+      content.appendChild(time);
+      content.appendChild(msg);
+      replyDiv.appendChild(av);
+      replyDiv.appendChild(content);
+      repliesContainer.appendChild(replyDiv);
+    });
+  }
+
+  // Reply input
+  const replyText = document.getElementById('nmod-reply-text');
+  const replySubmit = document.getElementById('nmod-reply-submit');
+  replyText.value = '';
+
+  // Show/hide reply badge on card if there are replies
+  const card = document.querySelector(`.nwrap[data-id="${n.id}"]`);
+  if (card && n.replies && n.replies.length > 0) {
+    const badge = card.querySelector('.nwrap-badge');
+    if (!badge) {
+      const newBadge = document.createElement('div');
+      newBadge.className = 'nwrap-badge';
+      newBadge.style.top = 'auto';
+      newBadge.style.right = 'auto';
+      newBadge.textContent = `💬 ${n.replies.length}`;
+      newBadge.style.position = 'static';
+      newBadge.style.marginTop = '3px';
+      newBadge.style.marginLeft = 'auto';
+      const cardEl = card.querySelector('.ncard');
+      if (cardEl) cardEl.appendChild(newBadge);
+    }
+  }
+}
+
+// Setup reply input handler (once at page load)
+function setupReplyInput() {
+  const replyText = document.getElementById('nmod-reply-text');
+  const replySubmit = document.getElementById('nmod-reply-submit');
+  let mentionDropdown = null;
+
+  replyText.addEventListener('input', (e) => {
+    const text = e.target.value;
+    const atIndex = text.lastIndexOf('@');
+
+    if (atIndex === -1 || atIndex === text.length - 1) {
+      if (mentionDropdown) mentionDropdown.remove();
+      mentionDropdown = null;
+      return;
+    }
+
+    const partial = text.substring(atIndex + 1);
+    const matches = MEMBERS.filter(m => m.name.toLowerCase().includes(partial.toLowerCase()));
+
+    if (matches.length === 0) {
+      if (mentionDropdown) mentionDropdown.remove();
+      mentionDropdown = null;
+      return;
+    }
+
+    if (mentionDropdown) mentionDropdown.remove();
+    mentionDropdown = document.createElement('div');
+    mentionDropdown.className = 'mention-autocomplete';
+    mentionDropdown.style.position = 'absolute';
+
+    const rect = replyText.getBoundingClientRect();
+    mentionDropdown.style.left = rect.left + 'px';
+    mentionDropdown.style.top = (rect.bottom + 5) + 'px';
+
+    matches.forEach(m => {
+      const item = document.createElement('div');
+      item.className = 'mention-autocomplete-item';
+      item.textContent = '@' + m.name;
+      item.addEventListener('click', () => {
+        const before = text.substring(0, atIndex);
+        const after = text.substring(atIndex + partial.length + 1);
+        replyText.value = before + '@' + m.name + after;
+        mentionDropdown.remove();
+        mentionDropdown = null;
+        replyText.focus();
+      });
+      mentionDropdown.appendChild(item);
+    });
+
+    document.body.appendChild(mentionDropdown);
+  });
+
+  replySubmit.addEventListener('click', async () => {
+    const n = NODES.find(x => x.id === currentNodeId);
+    if (!n) return;
+
+    const msg = replyText.value.trim();
+    if (!msg) return;
+
+    if (!n.replies) n.replies = [];
+
+    const reply = {
+      id: Date.now() + '-' + Math.random().toString(36).substr(2, 9),
+      member: MEMBERS[0].id,  // current user (hardcoded as first member since no auth)
+      msg: msg,
+      date: todayStr,
+      mentions: parseMentions(msg)
+    };
+
+    n.replies.push(reply);
+    saveNode(n);
+
+    // Send Discord mention notifications
+    const from = mem(reply.member);
+    const branch = branchObj(n.branch) || { name: n.branch };
+    reply.mentions.forEach(mentionedMemberId => {
+      const mentioned = mem(mentionedMemberId);
+      sendDiscordMention(from.name, mentioned.name, branch.name, msg, n.id);
+
+      // Create mention record
+      const mention = {
+        nodeId: n.id,
+        branchName: branch.name,
+        fromMember: reply.member,
+        toMember: mentionedMemberId,
+        msg: msg,
+        date: todayStr,
+        read: false,
+        createdAt: new Date().toISOString()
+      };
+      saveMention(mention);
+    });
+
+    // Re-render replies
+    renderReplies(n);
+    replyText.value = '';
+    updateNotifyBadge();
+  });
+}
+
+// ─────────────────────────────────────────────
 // NODE MODAL
 // ─────────────────────────────────────────────
 function openNodeModal(id){
@@ -1736,6 +2056,9 @@ function openNodeModal(id){
     urlRow.append(urlI,addBtn);addRow.append(nameI,urlRow);linksArea.appendChild(addRow);
   }
   renderNodeLinks();
+
+  // ── RENDER REPLIES ──
+  renderReplies(n);
 
   // ── Show view mode, hide edit mode ──
   document.getElementById('nmod-view').style.display='';
@@ -2954,4 +3277,13 @@ const USE_LOCAL = false;
     console.log('🧪 本地測試模式：使用內建假資料，不連線 Firestore');
   }
   render();
+  setupReplyInput();
+  updateNotifyBadge();
+
+  // Check URL for ?node=xxx parameter and auto-open node
+  const params = new URLSearchParams(window.location.search);
+  if (params.has('node')) {
+    const nodeId = isNaN(params.get('node')) ? params.get('node') : Number(params.get('node'));
+    setTimeout(() => openNodeModal(nodeId), 300);
+  }
 })();
