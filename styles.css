@@ -107,6 +107,9 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .lc-trunk{height:32px;display:flex;align-items:center;padding:4px 10px;gap:6px;border-bottom:1px solid var(--border2);cursor:pointer;flex-shrink:0;user-select:none;background:var(--surface);transition:background .12s;}
 .lc-trunk-sub{display:flex;align-items:center;gap:4px;width:100%;padding-left:22px;}
 .lc-trunk:hover{background:var(--surface2);}
+.lc-trunk-urgent{box-shadow:inset 3px 0 0 #dc2626, 0 0 8px rgba(220,38,38,0.15);animation:urgpulse-label 2.5s ease infinite;}
+.lc-br-urgent{box-shadow:inset 3px 0 0 #dc2626, 0 0 6px rgba(220,38,38,0.12);animation:urgpulse-label 2.5s ease infinite;}
+@keyframes urgpulse-label{0%,100%{box-shadow:inset 3px 0 0 #dc2626, 0 0 6px rgba(220,38,38,0.12)}50%{box-shadow:inset 3px 0 0 #dc2626, 0 0 14px rgba(220,38,38,0.25)}}
 .lc-add-br-inline{margin-left:auto;width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text-dim);cursor:pointer;flex-shrink:0;transition:all .12s;opacity:0;}
 .lc-trunk:hover .lc-add-br-inline{opacity:1;}
 .lc-add-br-inline:hover{background:var(--surface3);color:var(--text);}

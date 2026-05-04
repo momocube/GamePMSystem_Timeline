@@ -610,8 +610,9 @@ function buildLabels(){
         dragTrunkIdx=null;
       });
       const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
-      const bd=document.createElement('span');bd.className='lc-brdot';bd.style.background=t.color;
-      const bn=document.createElement('span');bn.className='lc-tname lc-indep-name';bn.style.color=t.color;bn.textContent=t.name;
+      const indepStColor=statusObj(t.status||'todo').color;
+      const bd=document.createElement('span');bd.className='lc-brdot';bd.style.background=indepStColor;
+      const bn=document.createElement('span');bn.className='lc-tname lc-indep-name';bn.style.color=indepStColor;bn.textContent=t.name;
       ibr.append(drag,bd,bn);
       ibr.addEventListener('contextmenu',e=>{
         e.preventDefault();e.stopPropagation();
@@ -660,6 +661,10 @@ function buildLabels(){
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
     const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background='#b0b0b0';
     const nm=document.createElement('span');nm.className='lc-tname';nm.style.color='#666';nm.textContent=t.name;
+    // High priority red glow on trunk name
+    if(t.priority==='highest'||t.priority==='high'){
+      tr.classList.add('lc-trunk-urgent');
+    }
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
     tr.append(drag,ca,dt,nm,addBrBtn);
@@ -683,6 +688,9 @@ function buildLabels(){
       // Fade labels for done/hold
       const lbStatus=b.status||'todo';
       if(lbStatus==='done'||lbStatus==='hold'){br.style.opacity='0.5';br.style.filter='saturate(0.3)';}
+      // High priority red glow on branch
+      const bPri=b.priority||t.priority||'normal';
+      if(bPri==='highest'||bPri==='high'){br.classList.add('lc-br-urgent');}
       br.draggable=true;
       // Drag child branch out → becomes independent
       br.addEventListener('dragstart',e=>{
@@ -904,7 +912,7 @@ function initAddButtons(){
       TRUNKS.filter(t=>!t.isBranch).forEach(t=>{
         const item=document.createElement('div');
         item.style.cssText='padding:6px 10px;cursor:pointer;border-radius:4px;font-size:11px;display:flex;align-items:center;gap:6px;';
-        item.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:${t.color};flex-shrink:0;"></span>${t.name}`;
+        item.innerHTML=`<span style="width:8px;height:8px;border-radius:50%;background:#b0b0b0;flex-shrink:0;"></span>${t.name}`;
         item.addEventListener('mouseenter',()=>item.style.background='var(--surface2)');
         item.addEventListener('mouseleave',()=>item.style.background='');
         item.addEventListener('click',()=>{pop.remove();openAddBranchModal(t.id);});
@@ -992,21 +1000,9 @@ function openDetailPanel(trunkId,force){
   }
   openTrunkId=trunkId;openBranchId=null;
   const t=TRUNKS.find(x=>x.id===trunkId);if(!t)return;
-  document.getElementById('dp-hdr-dot').style.background=t.color;
+  document.getElementById('dp-hdr-dot').style.background='#b0b0b0';
   document.getElementById('dp-hdr-name').textContent=t.name;
   const body=document.getElementById('dp-body');body.innerHTML='';
-
-  // Status
-  const statusSec=sec('專案狀態');
-  const statusRow=document.createElement('div');statusRow.style.cssText='display:flex;flex-wrap:wrap;gap:4px;';
-  PROJECT_STATUSES.forEach(st=>{
-    const chip=document.createElement('div');chip.className='dash-status';
-    chip.style.cssText=`background:${st.bg};color:${st.color};cursor:pointer;border:2px solid ${t.status===st.id?st.color:'transparent'};transition:all .12s;`;
-    chip.textContent=st.label;
-    chip.addEventListener('click',()=>{t.status=st.id;saveTrunk(t);openDetailPanel(trunkId,true);buildLabels();buildTimeline();});
-    statusRow.appendChild(chip);
-  });
-  statusSec.appendChild(statusRow);body.appendChild(statusSec);
 
   // Priority
   const priSec=sec('優先度');
@@ -1030,14 +1026,6 @@ function openDetailPanel(trunkId,force){
   ownerAdd.addEventListener('click',e=>openPersonPop(e,mid=>{t.owner=mid;saveTrunk(t);openDetailPanel(trunkId,true);buildOwnerFilter();}));
   ownerRow.appendChild(ownerAdd);ownerSec.appendChild(ownerRow);body.appendChild(ownerSec);
 
-  // Collaborators
-  const collabSec=sec('協作者');
-  const collabRow=document.createElement('div');collabRow.className='dp-people-row';
-  (t.collaborators||[]).forEach(mid=>collabRow.appendChild(personChip(mid,()=>{t.collaborators=t.collaborators.filter(x=>x!==mid);saveTrunk(t);openDetailPanel(trunkId,true);})));
-  const collabAdd=document.createElement('div');collabAdd.className='dp-add-person';collabAdd.textContent='+';
-  collabAdd.addEventListener('click',e=>openPersonPop(e,mid=>{if(!t.collaborators.includes(mid)){t.collaborators.push(mid);saveTrunk(t);openDetailPanel(trunkId,true);}}));
-  collabRow.appendChild(collabAdd);collabSec.appendChild(collabRow);body.appendChild(collabSec);
-
   // Trackers
   const trackSec=sec('追蹤者');
   const trackRow=document.createElement('div');trackRow.className='dp-people-row';
@@ -1045,36 +1033,6 @@ function openDetailPanel(trunkId,force){
   const trackAdd=document.createElement('div');trackAdd.className='dp-add-person';trackAdd.textContent='+';
   trackAdd.addEventListener('click',e=>openPersonPop(e,mid=>{if(!t.trackers)t.trackers=[];if(!t.trackers.includes(mid)){t.trackers.push(mid);saveTrunk(t);openDetailPanel(trunkId,true);}}));
   trackRow.appendChild(trackAdd);trackSec.appendChild(trackRow);body.appendChild(trackSec);
-
-  // Trunk dates
-  const dateSec=sec('期間設定');
-  const dateRow=document.createElement('div');dateRow.style.cssText='display:flex;gap:6px;';
-  const startInp=document.createElement('input');startInp.type='date';startInp.value=t.start;startInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;';
-  startInp.addEventListener('change',()=>{t.start=startInp.value;saveTrunk(t);buildTimeline();buildLabels();});
-  const endInp=document.createElement('input');endInp.type='date';endInp.value=t.end||'';endInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;';
-  endInp.addEventListener('change',()=>{t.end=endInp.value;saveTrunk(t);buildTimeline();buildLabels();});
-  const startLbl=document.createElement('div');startLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
-  startLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">開始</span>';startLbl.appendChild(startInp);
-  const endLbl=document.createElement('div');endLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
-  endLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">截止</span>';endLbl.appendChild(endInp);
-  dateRow.append(startLbl,endLbl);dateSec.appendChild(dateRow);body.appendChild(dateSec);
-
-  // Branch deadlines
-  if(t.branches.length>0){
-    const brDateSec=sec('枝幹截止日設定');
-    t.branches.forEach((b,bidx)=>{
-      const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
-      const dot=document.createElement('div');dot.style.cssText=`width:6px;height:6px;border-radius:50%;background:${statusObj(b.status||'todo').color};flex-shrink:0;`;
-      const name=document.createElement('span');name.style.cssText='font-size:10px;color:var(--text-mid);min-width:50px;';name.textContent=b.name;
-      const bEnd=document.createElement('input');bEnd.type='date';bEnd.value=b.end||'';bEnd.style.cssText='flex:1;padding:3px 5px;font-size:10px;';
-      bEnd.addEventListener('change',()=>{
-        b.end=bEnd.value||null;
-        saveTrunk(t);buildTimeline();buildLabels();
-      });
-      row.append(dot,name,bEnd);brDateSec.appendChild(row);
-    });
-    body.appendChild(brDateSec);
-  }
 
   // Description
   const descSec=sec('說明');
@@ -1124,7 +1082,7 @@ function openBranchDetail(trunkId,branchId,force){
     if(!b)return;
   } else return;
 
-  document.getElementById('dp-hdr-dot').style.background=b.color||(t?t.color:'#aaa');
+  document.getElementById('dp-hdr-dot').style.background=statusObj(b.status||'todo').color;
   document.getElementById('dp-hdr-name').textContent=b.name;
   const body=document.getElementById('dp-body');body.innerHTML='';
 
