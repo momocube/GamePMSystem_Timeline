@@ -434,11 +434,12 @@ function renderMentionText(text) {
 async function sendDiscordMention(fromName, toName, branchName, msg, nodeId) {
   const appUrl = window.location.origin + window.location.pathname;
   const link = `${appUrl}?node=${nodeId}`;
-  const body = {
-    content: `📌 **${fromName}** 在【${branchName}】標註了 **${toName}**\n> ${msg.substring(0, 100)}${msg.length > 100 ? '…' : ''}\n🔗 [查看留言](${link})`
-  };
+  const content = `📌 **${fromName}** 在【${branchName}】標註了 **${toName}**\n> ${msg.substring(0, 100)}${msg.length > 100 ? '…' : ''}\n🔗 [查看留言](${link})`;
+  // Use FormData to avoid CORS preflight (Discord blocks JSON Content-Type from browsers)
+  const form = new FormData();
+  form.append('payload_json', JSON.stringify({ content }));
   try {
-    await fetch(DISCORD_WEBHOOK, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    await fetch(DISCORD_WEBHOOK, { method: 'POST', body: form });
   } catch (e) { console.warn('Discord webhook error:', e); }
 }
 
