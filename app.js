@@ -397,20 +397,20 @@ function deriveColor(baseHex,idx){
 // MENTIONS & REPLIES
 // ─────────────────────────────────────────────
 function parseMentions(text) {
-  const regex = /@(\w+)/g;
+  // Match @Name where Name can be Chinese, English, digits, underscore
   const mentions = [];
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    const name = match[1];
-    const member = MEMBERS.find(m => m.name === name);
-    if (member) mentions.push(member.id);
-  }
+  MEMBERS.forEach(m => {
+    if (text.includes('@' + m.name)) mentions.push(m.id);
+  });
   return [...new Set(mentions)];
 }
 
 function renderMentionText(text) {
   const span = document.createElement('span');
-  const regex = /(@\w+)/g;
+  // Build regex from actual member names to support Chinese
+  const escaped = MEMBERS.map(m => m.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = escaped.length > 0 ? new RegExp('(@(?:' + escaped.join('|') + '))', 'g') : null;
+  if (!regex) { span.textContent = text; return span; }
   const parts = text.split(regex);
   parts.forEach(part => {
     if (part.startsWith('@')) {
@@ -435,12 +435,14 @@ async function sendDiscordMention(fromName, toName, branchName, msg, nodeId) {
   const appUrl = window.location.origin + window.location.pathname;
   const link = `${appUrl}?node=${nodeId}`;
   const content = `📌 **${fromName}** 在【${branchName}】標註了 **${toName}**\n> ${msg.substring(0, 100)}${msg.length > 100 ? '…' : ''}\n🔗 [查看留言](${link})`;
+  console.log('📤 Discord webhook sending:', { fromName, toName, branchName, content });
   // Use FormData to avoid CORS preflight (Discord blocks JSON Content-Type from browsers)
   const form = new FormData();
   form.append('payload_json', JSON.stringify({ content }));
   try {
-    await fetch(DISCORD_WEBHOOK, { method: 'POST', body: form });
-  } catch (e) { console.warn('Discord webhook error:', e); }
+    const res = await fetch(DISCORD_WEBHOOK, { method: 'POST', body: form });
+    console.log('📤 Discord webhook response:', res.status, res.statusText);
+  } catch (e) { console.warn('❌ Discord webhook error:', e); }
 }
 
 function saveMention(mention) {
@@ -1945,6 +1947,7 @@ function setupReplyInput() {
     saveNode(n);
 
     // Send Discord mention notifications
+    console.log('🔍 Reply mentions detected:', reply.mentions, 'in msg:', msg);
     const from = mem(reply.member);
     const branch = branchObj(n.branch) || { name: n.branch };
     reply.mentions.forEach(mentionedMemberId => {
