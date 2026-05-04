@@ -487,10 +487,26 @@ function buildRuler(){
       const lbl=document.createElement('div');lbl.className='rc-holiday-label';lbl.textContent=TW_HOLIDAYS[ds];
       c.appendChild(lbl);
     }
-    // always show date number
     if(d.getDate()===1){c.classList.add('ms');c.insertAdjacentHTML('beforeend',`${d.getMonth()+1}月`);}
     else c.insertAdjacentHTML('beforeend',`${d.getDate()}`);
     el.appendChild(c);
+  }
+  // Build day-column background strips
+  buildDayBg(days);
+}
+function buildDayBg(dayCount){
+  let bg=document.getElementById('day-bg');
+  if(!bg){bg=document.createElement('div');bg.id='day-bg';document.getElementById('canvas').appendChild(bg);}
+  bg.innerHTML='';
+  for(let i=0;i<=dayCount;i++){
+    const d=new Date(START);d.setDate(d.getDate()+i);
+    const ds=d.toISOString().split('T')[0];
+    const col=document.createElement('div');col.className='day-col';
+    col.style.left=(i*DP)+'px';col.style.width=DP+'px';
+    const dow=d.getDay();
+    if(TW_HOLIDAYS[ds]) col.classList.add('day-col-holiday');
+    else if(dow===0||dow===6) col.classList.add('day-col-weekend');
+    bg.appendChild(col);
   }
 }
 
@@ -1727,10 +1743,10 @@ if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.v
 // NOTIFICATION BELL & MENTIONS
 // ─────────────────────────────────────────────
 function updateNotifyBadge() {
-  const todayMentions = MENTIONS.filter(m => m.date === todayStr);
+  const unread = MENTIONS.filter(m => m.date === todayStr && !m.read);
   const badge = document.getElementById('notify-badge');
-  if (todayMentions.length > 0) {
-    badge.textContent = todayMentions.length;
+  if (unread.length > 0) {
+    badge.textContent = unread.length;
     badge.style.display = 'flex';
   } else {
     badge.style.display = 'none';
