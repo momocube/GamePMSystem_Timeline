@@ -34,16 +34,6 @@
 <div id="main">
   <div id="lcol">
     <div id="lspc"><span id="lspc-label">BRANCH INFO</span></div>
-    <div id="lcol-filters">
-      <select class="lcol-filter-sel" id="type-filter-sel">
-        <option value="all">全部類型</option>
-        <option value="update">📝 進度回報</option>
-        <option value="milestone">🏁 里程碑</option>
-      </select>
-      <select class="lcol-filter-sel" id="owner-filter-sel">
-        <option value="all">👤 全部負責人</option>
-      </select>
-    </div>
     <div id="lbody"></div>
     <div id="lcol-resize-handle"></div>
   </div>
@@ -127,7 +117,10 @@
   <div class="modal-box" id="nmod-box">
     <div class="modal-hdr">
       <div style="font-size:10px;color:var(--text-dim);" id="nmod-type-hdr"></div>
-      <button class="mclose" id="nmod-close">✕</button>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <button class="nmod-edit-btn" id="nmod-edit-btn" title="編輯">✏️ 編輯</button>
+        <button class="mclose" id="nmod-close">✕</button>
+      </div>
     </div>
     <div id="nmod-slides">
       <img id="nmod-img" src="" alt="">
@@ -136,25 +129,46 @@
       <div id="slctr"></div>
     </div>
     <div id="nmod-body">
-      <div class="nmod-row">
-        <div class="nmod-av" id="nmod-av2"></div>
-        <div class="nmod-right">
-          <div class="nmod-who" id="nmod-who2"></div>
-          <div class="nmod-branch" id="nmod-branch"></div>
-          <textarea class="nmod-edit" id="nmod-msg-edit" rows="3"></textarea>
-          <div id="nmod-img-upload" onclick="document.getElementById('nmod-ifinput').click()">📎 新增圖片</div>
-          <input type="file" id="nmod-ifinput" accept="image/*" multiple style="display:none">
-          <div id="nmod-img-previews"></div>
-          <div id="nmod-links" style="margin-top:6px;display:flex;flex-direction:column;gap:3px;"></div>
+      <!-- READ-ONLY VIEW (default) -->
+      <div id="nmod-view" class="nmod-view-mode">
+        <div class="nmod-row">
+          <div class="nmod-av" id="nmod-av2"></div>
+          <div class="nmod-right">
+            <div class="nmod-who" id="nmod-who2"></div>
+            <div class="nmod-branch" id="nmod-branch"></div>
+            <div class="nmod-msg-text" id="nmod-msg-text"></div>
+            <div id="nmod-view-images" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;"></div>
+            <div id="nmod-view-links" style="margin-top:6px;display:flex;flex-direction:column;gap:3px;"></div>
+          </div>
+        </div>
+        <div class="nmod-meta">
+          <div class="nmod-date" id="nmod-date"></div>
+          <div class="nmod-collabs" id="nmod-collabs"></div>
+          <button class="nmod-del" id="nmod-del" title="刪除此回報">🗑️</button>
+          <button class="nmod-copy" id="nmod-copy" title="複製回報內容">📋</button>
         </div>
       </div>
-      <!-- attendees removed -->
-      <div class="nmod-meta">
-        <div class="nmod-date" id="nmod-date"></div>
-        <div class="nmod-collabs" id="nmod-collabs"></div>
-        <button class="nmod-del" id="nmod-del" title="刪除此回報">🗑️</button>
-        <button class="nmod-copy" id="nmod-copy" title="複製回報內容">📋</button>
-        <button class="nmod-save" id="nmod-save">儲存</button>
+      <!-- EDIT MODE (hidden by default) -->
+      <div id="nmod-edit" class="nmod-edit-mode" style="display:none;">
+        <div class="nmod-row">
+          <div class="nmod-av" id="nmod-av2-edit"></div>
+          <div class="nmod-right">
+            <div class="nmod-who" id="nmod-who2-edit"></div>
+            <div class="nmod-branch" id="nmod-branch-edit"></div>
+            <textarea class="nmod-edit" id="nmod-msg-edit" rows="3"></textarea>
+            <div id="nmod-img-upload" onclick="document.getElementById('nmod-ifinput').click()">📎 新增圖片</div>
+            <input type="file" id="nmod-ifinput" accept="image/*" multiple style="display:none">
+            <div id="nmod-img-previews"></div>
+            <div id="nmod-links" style="margin-top:6px;display:flex;flex-direction:column;gap:3px;"></div>
+          </div>
+        </div>
+        <div class="nmod-meta">
+          <div class="nmod-date" id="nmod-date-edit"></div>
+          <div class="nmod-collabs" id="nmod-collabs-edit"></div>
+          <button class="nmod-del" id="nmod-del-edit" title="刪除此回報">🗑️</button>
+          <button class="nmod-copy" id="nmod-copy-edit" title="複製回報內容">📋</button>
+          <button class="nmod-save" id="nmod-save">儲存</button>
+        </div>
       </div>
     </div>
   </div>

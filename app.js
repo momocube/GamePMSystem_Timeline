@@ -142,6 +142,16 @@ let PRIORITIES = [
 ];
 function priorityObj(id){ return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2]; }
 
+// Derive trunk status from branches (trunk has no own status)
+function deriveTrunkStatus(t){
+  const bs=(t.branches||[]);
+  if(!bs.length)return statusObj('todo');
+  if(bs.every(b=>(b.status||'todo')==='done'))return statusObj('done');
+  if(bs.every(b=>(b.status||'todo')==='hold'||(b.status||'todo')==='done'))return statusObj('hold');
+  if(bs.some(b=>(b.status||'todo')==='wip'||(b.status||'todo')==='testing'))return statusObj('wip');
+  return statusObj('todo');
+}
+
 let NC=100, DRC=100;
 const exp={};TRUNKS.forEach(t=>exp[t.id]=false);
 let activeType='all',activeMems=new Set(),activeOwner='all',pendImgs=[],editImgs=[],pendLinks=[],editNodeLinks=[];
@@ -672,11 +682,10 @@ function buildLabels(){
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
     if(exp[t.id]){bg.classList.add('open');bg.style.height=(t.branches.length*BH())+'px';}else{bg.style.height='0px';}
     t.branches.forEach((b,bidx)=>{
-      const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
+      const displayColor=statusObj(b.status||'todo').color;
       const br=document.createElement('div');br.className='lc-br';
       // Fade labels for done/hold
-      const lbStatus=b.status||t.status||'todo';
-      const lbPri=b.priority||t.priority||'normal';
+      const lbStatus=b.status||'todo';
       if(lbStatus==='done'||lbStatus==='hold'){br.style.opacity='0.5';br.style.filter='saturate(0.3)';}
       br.draggable=true;
       // Drag child branch out → becomes independent
@@ -1059,7 +1068,7 @@ function openDetailPanel(trunkId,force){
     const brDateSec=sec('枝幹截止日設定');
     t.branches.forEach((b,bidx)=>{
       const row=document.createElement('div');row.style.cssText='display:flex;align-items:center;gap:6px;margin-bottom:6px;';
-      const dot=document.createElement('div');dot.style.cssText=`width:6px;height:6px;border-radius:50%;background:${b.color===t.color?deriveColor(b.color,bidx+1):b.color};flex-shrink:0;`;
+      const dot=document.createElement('div');dot.style.cssText=`width:6px;height:6px;border-radius:50%;background:${statusObj(b.status||'todo').color};flex-shrink:0;`;
       const name=document.createElement('span');name.style.cssText='font-size:10px;color:var(--text-mid);min-width:50px;';name.textContent=b.name;
       const bEnd=document.createElement('input');bEnd.type='date';bEnd.value=b.end||'';bEnd.style.cssText='flex:1;padding:3px 5px;font-size:10px;';
       bEnd.addEventListener('change',()=>{
@@ -1270,7 +1279,7 @@ function buildTimeline(){
     // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
       const tr=document.createElement('div');tr.className='trow trow-indep';tr.dataset.trunk=t.id;tr.dataset.branch=t.id;
-      const displayColor=t.color;
+      const displayColor=statusObj(t.status||'todo').color;
       // bar (thinner, branch style)
       const bar=document.createElement('div');bar.className='tbar tbar-indep';
       if(!t.end){
@@ -1295,15 +1304,14 @@ function buildTimeline(){
 
     // ── Normal trunk ──
     const tr=document.createElement('div');tr.className='trow';tr.dataset.trunk=t.id;
-    // Priority & status visual
-    const tIsFaded=t.status==='done'||t.status==='hold';
-    const tIsHighest=t.priority==='highest';
-    const tIsHigh=t.priority==='high';
+    // Trunk status derived from branches
+    const tDerived=deriveTrunkStatus(t);
+    const tIsFaded=tDerived.id==='done'||tDerived.id==='hold';
     if(tIsFaded){tr.style.opacity='0.5';tr.style.filter='saturate(0.3)';}
+    // Trunk bar: gray when collapsed (no own status), derived status color when expanded
+    const trunkBarColor=exp[t.id]?tDerived.color:'#c0c0c0';
     const bar=document.createElement('div');bar.className='tbar';
-    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${t.color}`;
-    if(tIsHighest){bar.dataset.pri='highest';bar.style.boxShadow='0 0 0 2px #dc2626';bar.style.borderRadius='3px';bar.style.height='6px';}
-    else if(tIsHigh){bar.style.boxShadow='0 0 0 2px #f97316';bar.style.borderRadius='3px';bar.style.height='6px';}
+    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${trunkBarColor}`;
     // Drag handles on trunk bar
     const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
     const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
@@ -1326,13 +1334,11 @@ function buildTimeline(){
     if(exp[t.id])setTimeout(()=>bg.classList.add('expanded'),280);
     t.branches.forEach((b,bidx)=>{
       const brow=document.createElement('div');brow.className='brow';brow.dataset.branch=b.id;
-      const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
-      // Priority & status visual for branch
-      const bStatus=b.status||t.status||'todo';
-      const bPriority=b.priority||t.priority||'normal';
+      // Branch bar color = status color
+      const bStatus=b.status||'todo';
+      const bStatusObj=statusObj(bStatus);
+      const displayColor=bStatusObj.color;
       const bIsFaded=bStatus==='done'||bStatus==='hold';
-      const bIsHighest=bPriority==='highest';
-      const bIsHigh=bPriority==='high';
       if(bIsFaded){brow.style.opacity='0.5';brow.style.filter='saturate(0.3)';}
       // stem
       const st=document.createElement('div');st.className='stem';
@@ -1358,9 +1364,6 @@ function buildTimeline(){
           brow.appendChild(dw);
         }
       }
-      // Priority left-border accent on bar
-      if(bIsHighest){bb.dataset.pri='highest';bb.style.borderLeft='4px solid #dc2626';bb.style.borderRadius='3px';bb.style.boxShadow='0 0 6px rgba(220,38,38,0.3)';}
-      else if(bIsHigh){bb.style.borderLeft='4px solid #f97316';bb.style.borderRadius='3px';}
       // Drag handles on bar
       const lHandle=document.createElement('div');lHandle.className='bar-handle bar-handle-l';
       const rHandle=document.createElement('div');rHandle.className='bar-handle bar-handle-r';
@@ -1397,7 +1400,7 @@ function drawVinePaths(bgEl,trunk){
     const trunkY=-TH/2;
     const branchX=dx(b.start);
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
-    const branchColor=b.color===trunk.color?deriveColor(b.color,idx+1):b.color;
+    const branchColor=statusObj(b.status||'todo').color;
     const d=`M ${branchX} ${trunkY} C ${branchX} ${trunkY+BranchH*0.3}, ${branchX} ${branchY-BranchH*0.3}, ${branchX} ${branchY}`;
     path.setAttribute('d',d);
     path.setAttribute('stroke',branchColor);
@@ -1412,8 +1415,8 @@ function addPills(tr,trunk){
   trunk.branches.forEach(b=>{
     const p=document.createElement('div');p.className='tpill';
     const endX=b.end?dx(b.end):(tw());
-    const displayColor=b.color===trunk.color?deriveColor(b.color,trunk.branches.indexOf(b)+1):b.color;
-    p.style.cssText=`left:${dx(b.start)}px;width:${endX-dx(b.start)}px;background:${displayColor}`;
+    const bSt=statusObj(b.status||'todo');
+    p.style.cssText=`left:${dx(b.start)}px;width:${endX-dx(b.start)}px;background:${bSt.color}`;
     p.textContent=b.name;tr.appendChild(p);
   });
 }
@@ -1692,15 +1695,11 @@ function applyF(){
     br.classList.toggle('dimmed',!any&&(activeType!=='all'||activeMems.size>0));
   });
 }
-document.getElementById('type-filter-sel').addEventListener('change',function(){
-  activeType=this.value;
-  applyF();
-});
-
-document.getElementById('owner-filter-sel').addEventListener('change',function(){
-  activeOwner=this.value;
-  buildLabels();buildTimeline();
-});
+// Type & owner filter (removed from UI — filtering via header avatars)
+const _typeFSel=document.getElementById('type-filter-sel');
+if(_typeFSel)_typeFSel.addEventListener('change',function(){activeType=this.value;applyF();});
+const _ownerFSel=document.getElementById('owner-filter-sel');
+if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;buildLabels();buildTimeline();});
 
 // ─────────────────────────────────────────────
 // NODE MODAL
@@ -1709,14 +1708,51 @@ function openNodeModal(id){
   const n=NODES.find(x=>x.id===id);if(!n)return;
   currentNodeId=id;editImgs=[...(n.images||[])];
   const m=mem(n.member),b=branchObj(n.branch);
+  const rtObj=reportTypeObj(n.type);
+
+  // ── READ-ONLY VIEW ──
+  document.getElementById('nmod-type-hdr').textContent=rtObj.label;
   document.getElementById('nmod-av2').style.background=m.color;
   document.getElementById('nmod-av2').textContent=initials(m.name);
   document.getElementById('nmod-who2').textContent=m.name;
-  document.getElementById('nmod-type-hdr').textContent=n.type==='milestone'?'🏁 里程碑':n.type==='trip'?'✈️ 出差/公出':'📝 進度回報';
-  document.getElementById('nmod-branch').textContent=b?`${b.name}`:'';
+  document.getElementById('nmod-branch').textContent=b?b.name:'';
   document.getElementById('nmod-branch').style.color=b?b.color:'#aaa';
-  document.getElementById('nmod-msg-edit').value=n.msg;
+  // Message text (read-only)
+  const msgText=document.getElementById('nmod-msg-text');
+  msgText.textContent=n.msg||'';
   // Notes
+  if(n.notes){
+    let notesDiv=document.getElementById('nmod-view-notes');
+    if(!notesDiv){notesDiv=document.createElement('div');notesDiv.id='nmod-view-notes';notesDiv.style.cssText='margin-top:6px;font-size:11px;color:var(--text-dim);white-space:pre-wrap;';msgText.after(notesDiv);}
+    notesDiv.textContent=n.notes;notesDiv.style.display='';
+  } else {
+    const nd=document.getElementById('nmod-view-notes');if(nd)nd.style.display='none';
+  }
+  // View images
+  const viewImgs=document.getElementById('nmod-view-images');viewImgs.innerHTML='';
+  (n.images||[]).forEach(src=>{
+    const img=document.createElement('img');img.src=src;img.style.cssText='max-width:120px;max-height:90px;border-radius:6px;cursor:pointer;object-fit:cover;border:1px solid var(--border);';
+    img.addEventListener('click',()=>{slImgs=[...(n.images||[])];slIdx=(n.images||[]).indexOf(src);updSlide();});
+    viewImgs.appendChild(img);
+  });
+  // View links
+  const viewLinks=document.getElementById('nmod-view-links');viewLinks.innerHTML='';
+  normLinks(n.links||[]).forEach(lk=>{
+    const a=document.createElement('a');a.href=lk.url;a.target='_blank';a.rel='noopener';
+    a.style.cssText='font-size:11px;color:var(--blue);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+    a.textContent='🔗 '+(lk.name||lk.url);a.title=lk.url;
+    viewLinks.appendChild(a);
+  });
+  document.getElementById('nmod-date').textContent=`📅 ${n.date}`;
+  const cc=document.getElementById('nmod-collabs');cc.innerHTML='';
+  (n.collaborators||[]).forEach(cid=>cc.appendChild(makeAv(cid,18)));
+
+  // ── EDIT MODE (pre-fill but hidden) ──
+  const editAv=document.getElementById('nmod-av2-edit');
+  if(editAv){editAv.style.background=m.color;editAv.textContent=initials(m.name);}
+  const editWho=document.getElementById('nmod-who2-edit');if(editWho)editWho.textContent=m.name;
+  const editBr=document.getElementById('nmod-branch-edit');if(editBr){editBr.textContent=b?b.name:'';editBr.style.color=b?b.color:'#aaa';}
+  document.getElementById('nmod-msg-edit').value=n.msg;
   let notesTA=document.getElementById('nmod-notes-edit');
   if(!notesTA){
     notesTA=document.createElement('textarea');notesTA.id='nmod-notes-edit';
@@ -1725,12 +1761,9 @@ function openNodeModal(id){
     document.getElementById('nmod-msg-edit').after(notesTA);
   }
   notesTA.value=n.notes||'';
-  document.getElementById('nmod-date').textContent=`📅 ${n.date}`;
-  // collaborators
-  const cc=document.getElementById('nmod-collabs');cc.innerHTML='';
-  (n.collaborators||[]).forEach(cid=>cc.appendChild(makeAv(cid,18)));
-  // meeting attendees removed
-  // links
+  const dateEdit=document.getElementById('nmod-date-edit');if(dateEdit)dateEdit.textContent=`📅 ${n.date}`;
+  const ccEdit=document.getElementById('nmod-collabs-edit');if(ccEdit){ccEdit.innerHTML='';(n.collaborators||[]).forEach(cid=>ccEdit.appendChild(makeAv(cid,18)));}
+  // Edit links
   const linksArea=document.getElementById('nmod-links');linksArea.innerHTML='';
   editNodeLinks=normLinks(n.links||[]);
   function renderNodeLinks(){
@@ -1744,7 +1777,6 @@ function openNodeModal(id){
       rm.addEventListener('click',e=>{e.stopPropagation();editNodeLinks.splice(i,1);renderNodeLinks();});
       item.append(a,rm);linksArea.appendChild(item);
     });
-    // add row
     const addRow=document.createElement('div');addRow.style.cssText='display:flex;flex-direction:column;gap:2px;margin-top:4px;';
     const nameI=document.createElement('input');nameI.type='text';nameI.placeholder='連結名稱（選填）';nameI.style.cssText='padding:3px 6px;font-size:10px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);outline:none;';
     const urlRow=document.createElement('div');urlRow.style.cssText='display:flex;gap:4px;';
@@ -1754,10 +1786,27 @@ function openNodeModal(id){
     urlRow.append(urlI,addBtn);addRow.append(nameI,urlRow);linksArea.appendChild(addRow);
   }
   renderNodeLinks();
-  // images
-  slImgs=[...editImgs];slIdx=0;updSlide();renderEditPrev();
+
+  // ── Show view mode, hide edit mode ──
+  document.getElementById('nmod-view').style.display='';
+  document.getElementById('nmod-edit').style.display='none';
+  document.getElementById('nmod-edit-btn').textContent='✏️ 編輯';
+
+  // images slideshow
+  slImgs=[...(n.images||[])];slIdx=0;updSlide();renderEditPrev();
   document.getElementById('nmodal').classList.add('open');
 }
+// Toggle view/edit mode
+document.getElementById('nmod-edit-btn').addEventListener('click',()=>{
+  const viewEl=document.getElementById('nmod-view');
+  const editEl=document.getElementById('nmod-edit');
+  const btn=document.getElementById('nmod-edit-btn');
+  if(editEl.style.display==='none'){
+    viewEl.style.display='none';editEl.style.display='';btn.textContent='👁️ 檢視';
+  } else {
+    viewEl.style.display='';editEl.style.display='none';btn.textContent='✏️ 編輯';
+  }
+});
 function updSlide(){
   const sl=document.getElementById('nmod-slides'),img=document.getElementById('nmod-img'),ctr=document.getElementById('slctr');
   if(!slImgs.length){sl.classList.remove('has');}
@@ -2096,13 +2145,13 @@ function buildDashboard(){
     const togTd=document.createElement('td');togTd.style.cssText='text-align:center;font-size:10px;color:var(--text-dim);width:24px;';
     togTd.textContent=t.branches.length>0?'▶':'';
     tr.appendChild(togTd);
+    // Status (derived from branches)
+    const st=deriveTrunkStatus(t);
     // Name
     const nameTd=document.createElement('td');
-    nameTd.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${t.color};margin-right:6px;vertical-align:middle;"></span><strong>${t.name}</strong>`;
+    nameTd.innerHTML=`<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${st.color};margin-right:6px;vertical-align:middle;"></span><strong>${t.name}</strong>`;
     tr.appendChild(nameTd);
-    // Status
     const stTd=document.createElement('td');
-    const st=statusObj(t.status);
     stTd.innerHTML=`<span class="dash-status" style="background:${st.bg};color:${st.color};">${st.label}</span>`;
     tr.appendChild(stTd);
     // Priority
@@ -2154,13 +2203,18 @@ function buildDashboard(){
       btr.style.background='var(--surface2)';
       const emTd=document.createElement('td');emTd.textContent='';btr.appendChild(emTd);
       const bnameTd=document.createElement('td');
-      const displayColor=b.color===t.color?deriveColor(b.color,bidx+1):b.color;
-      bnameTd.innerHTML=`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${displayColor};margin:0 6px 0 16px;vertical-align:middle;"></span><span style="font-size:11px;">${b.name}</span>`;
+      const bStObj=statusObj(b.status||'todo');
+      bnameTd.innerHTML=`<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${bStObj.color};margin:0 6px 0 16px;vertical-align:middle;"></span><span style="font-size:11px;">${b.name}</span>`;
       btr.appendChild(bnameTd);
-      // status placeholder
-      const bstTd=document.createElement('td');bstTd.textContent='—';btr.appendChild(bstTd);
-      // priority placeholder
-      const bpriTd=document.createElement('td');bpriTd.textContent='—';btr.appendChild(bpriTd);
+      // status
+      const bstTd=document.createElement('td');
+      bstTd.innerHTML=`<span class="dash-status" style="background:${bStObj.bg};color:${bStObj.color};">${bStObj.label}</span>`;
+      btr.appendChild(bstTd);
+      // priority
+      const bPriObj=priorityObj(b.priority||'normal');
+      const bpriTd=document.createElement('td');
+      bpriTd.innerHTML=`<span class="dash-status" style="background:${bPriObj.bg};color:${bPriObj.color};">${bPriObj.label}</span>`;
+      btr.appendChild(bpriTd);
       // reporters
       const bOwnerTd=document.createElement('td');
       const reporters=new Set();
@@ -2219,7 +2273,7 @@ function getWeekRangeStr(){
 function getDashData(){
   const rows=[];
   TRUNKS.forEach(t=>{
-    const st=statusObj(t.status);const pri=priorityObj(t.priority);
+    const st=deriveTrunkStatus(t);const pri=priorityObj(t.priority);
     const owner=t.owner?mem(t.owner).name:'';
     const collabs=(t.collaborators||[]).map(c=>mem(c).name).join(', ');
     const avgProg=t.branches.length>0?Math.round(t.branches.reduce((s,b)=>s+b.prog,0)/t.branches.length):0;
@@ -2231,7 +2285,8 @@ function getDashData(){
       const bNodeCount=NODES.filter(n=>n.branch===b.id).length;
       const bNodes=NODES.filter(n=>n.branch===b.id).sort((a,bb)=>new Date(bb.date)-new Date(a.date));
       const bLatest=bNodes.length>0?`${bNodes[0].date} ${mem(bNodes[0].member).name}: ${bNodes[0].msg}`:'';
-      rows.push({type:'branch',name:'  └ '+b.name,status:'—',priority:'—',owner:reporters,collabs:'',start:b.start,end:b.end||'∞',prog:b.prog+'%',nodes:bNodeCount,latest:bLatest});
+      const bSt=statusObj(b.status||'todo');const bPri=priorityObj(b.priority||'normal');
+      rows.push({type:'branch',name:'  └ '+b.name,status:bSt.label,priority:bPri.label,owner:reporters,collabs:'',start:b.start,end:b.end||'∞',prog:b.prog+'%',nodes:bNodeCount,latest:bLatest});
     });
   });
   return rows;

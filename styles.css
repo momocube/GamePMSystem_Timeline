@@ -40,9 +40,6 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 #lcol{width:var(--lcol-w);flex-shrink:0;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow:hidden;z-index:20;position:relative;}
 #lspc{height:40px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;padding:0 10px;gap:4px;}
 #lspc-label{font-size:9px;font-family:'DM Mono',monospace;color:var(--text-dim);letter-spacing:.06em;}
-#lcol-filters{display:flex;flex-direction:column;gap:4px;padding:6px 8px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface2);}
-.lcol-filter-sel{width:100%;padding:4px 6px;border-radius:4px;font-size:10px;font-family:'Noto Sans TC',sans-serif;border:1px solid var(--border);background:var(--surface);color:var(--text-mid);cursor:pointer;outline:none;}
-.lcol-filter-sel:hover{background:var(--surface3);}
 #lbody{flex:1;overflow-y:auto;overflow-x:hidden;display:flex;flex-direction:column;scrollbar-width:none;-ms-overflow-style:none;}
 #lbody::-webkit-scrollbar{display:none;}
 #lcol-resize-handle{width:4px;height:100%;position:absolute;right:-2px;top:0;cursor:ew-resize;z-index:21;}
@@ -322,6 +319,9 @@ select{padding:5px 7px;cursor:pointer;}
 .nmod-who{font-size:12px;font-weight:600;margin-bottom:2px;}
 .nmod-branch{font-size:10px;color:var(--text-dim);margin-bottom:8px;}
 textarea.nmod-edit{width:100%;min-height:60px;padding:6px 8px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);font-size:12px;line-height:1.6;resize:vertical;font-family:'Noto Sans TC',sans-serif;}
+.nmod-msg-text{font-size:13px;line-height:1.7;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+.nmod-edit-btn{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:500;border:1px solid var(--border);background:var(--surface2);color:var(--text-mid);cursor:pointer;transition:all .12s;}
+.nmod-edit-btn:hover{background:var(--accent);color:#fff;border-color:var(--accent);}
 textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .nmod-meta{display:flex;align-items:center;gap:8px;margin-top:8px;}
 .nmod-date{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-dim);}
@@ -369,7 +369,6 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 
 @keyframes pop{0%{transform:translateX(-50%) scale(0);opacity:0;}65%{transform:translateX(-50%) scale(1.08);}100%{transform:translateX(-50%) scale(1);opacity:1;}}
 .nwrap.new{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
-@keyframes urgpulse-bar{0%,100%{box-shadow:0 0 0 2px #dc2626}50%{box-shadow:0 0 8px 3px rgba(220,38,38,0.4)}}
 /* ── BAR DRAG HANDLES ── */
 .bar-handle{position:absolute;top:-6px;width:8px;height:calc(100% + 12px);cursor:ew-resize;z-index:5;opacity:0;transition:opacity .15s;border-radius:2px;}
 .bar-handle:hover,.bar-handle:active{opacity:1;background:rgba(25,118,210,0.4);}
@@ -379,7 +378,6 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .tbar,.bbar{cursor:grab;}
 .tbar:active,.bbar:active{cursor:grabbing;}
 
-.tbar[data-pri="highest"],.bbar[data-pri="highest"]{animation:urgpulse-bar 2s ease infinite;}
 
 /* ── ADD TRUNK/BRANCH BUTTON (in lspc header) ── */
 .lspc-add-btn{transition:all .12s;}
