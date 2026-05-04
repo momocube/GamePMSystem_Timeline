@@ -683,10 +683,8 @@ function buildLabels(){
         dragTrunkIdx=null;
       });
       const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
-      const indepStColor=statusObj(t.status||'todo').color;
-      const bd=document.createElement('span');bd.className='lc-brdot';bd.style.background=indepStColor;
-      const bn=document.createElement('span');bn.className='lc-tname lc-indep-name';bn.style.color=indepStColor;bn.textContent=t.name;
-      ibr.append(drag,bd,bn);
+      const bn=document.createElement('span');bn.className='lc-tname lc-indep-name';bn.style.color='var(--text)';bn.textContent=t.name;
+      ibr.append(drag,bn);
       ibr.addEventListener('contextmenu',e=>{
         e.preventDefault();e.stopPropagation();
         showContextMenu(e,t.id,null);
@@ -732,15 +730,14 @@ function buildLabels(){
     // Trunk label: always neutral gray (status derived from branches, not shown on trunk)
     const drag=document.createElement('span');drag.className='lc-drag';drag.textContent='⠿';drag.title='拖曳排序';
     const ca=document.createElement('span');ca.className='lc-caret'+(exp[t.id]?' open':'');ca.textContent='▶';
-    const dt=document.createElement('span');dt.className='lc-tdot';dt.style.background='#b0b0b0';
-    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color='#666';nm.textContent=t.name;
+    const nm=document.createElement('span');nm.className='lc-tname';nm.style.color='var(--text)';nm.textContent=t.name;
     // High priority red glow on trunk name
     if(t.priority==='highest'||t.priority==='high'){
       tr.classList.add('lc-trunk-urgent');
     }
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
-    tr.append(drag,ca,dt,nm,addBrBtn);
+    tr.append(drag,ca,nm,addBrBtn);
     // Right-click context menu for edit/delete
     tr.addEventListener('contextmenu',e=>{
       e.preventDefault();e.stopPropagation();
@@ -1306,13 +1303,12 @@ function buildTimeline(){
     // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
       const tr=document.createElement('div');tr.className='trow trow-indep';tr.dataset.trunk=t.id;tr.dataset.branch=t.id;
-      const displayColor=statusObj(t.status||'todo').color;
-      // bar (thinner, branch style)
+      // bar (trunk style: white bg black border)
       const bar=document.createElement('div');bar.className='tbar tbar-indep';
       if(!t.end){
-        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:${displayColor};opacity:.7;height:8px;top:12px;border-radius:4px`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${tw()-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1;height:8px;top:12px;border-radius:4px`;
       } else {
-        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:${displayColor};height:8px;top:12px;border-radius:4px;opacity:.9`;
+        bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;height:8px;top:12px;border-radius:4px;opacity:1`;
       }
       tr.appendChild(bar);
       // start dot
@@ -1334,7 +1330,7 @@ function buildTimeline(){
     // Trunk status derived from branches
     // Trunk bar: always neutral gray (branches carry status color)
     const bar=document.createElement('div');bar.className='tbar';
-    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#c0c0c0`;
+    bar.style.cssText=`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1`;
     // Drag handles on trunk bar
     const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
     const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
@@ -1342,8 +1338,7 @@ function buildTimeline(){
     setupBarDrag(bar,t,t,'trunk');
     tr.appendChild(bar);
     if(!exp[t.id]){
-      addPills(tr,t);
-      // Show node bubbles on collapsed trunk row
+      // Collapsed: only show trunk bar + node bubbles (no branch pills)
       const allBranchNodes=NODES.filter(n=>t.branches.some(b=>b.id===n.branch));
       allBranchNodes.forEach(n=>addCard(n,tr));
       spreadOverlappingCards(tr);
@@ -1703,7 +1698,7 @@ function toggle(id){
     else{tb.classList.remove('expanded');tb.style.height='0px';}
   }
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
-  if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());if(!open)addPills(tr,t);}
+  if(tr){tr.querySelectorAll('.tpill').forEach(p=>p.remove());}
   syncScrollHeights();
   setTimeout(syncScrollHeights,300);
 }
