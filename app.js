@@ -145,6 +145,7 @@ let PRIORITIES = [
   {id:'low',label:'低',color:'#757575',bg:'#f5f5f5'},
 ];
 function priorityObj(id){ return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2]; }
+function activeMembers(){ return MEMBERS.filter(m=>m.active!==false); }
 
 // Derive trunk status from branches (trunk has no own status)
 function deriveTrunkStatus(t){
@@ -516,7 +517,7 @@ function buildDayBg(dayCount){
 function buildHeaderAvatars(){
   const c=document.getElementById('mavs');c.innerHTML='';
   const row=document.createElement('div');row.className='av-row';
-  MEMBERS.forEach(m=>{
+  activeMembers().forEach(m=>{
     const av=makeAv(m.id,24);
     av.style.marginLeft='-5px';
     if(activeMems.size>0&&!activeMems.has(m.id))av.classList.add('muted');
@@ -551,7 +552,7 @@ function buildSelects(){
 
   populateBranchSelect();
   const rp=document.getElementById('rprep');rp.innerHTML='';
-  MEMBERS.forEach(m=>{
+  activeMembers().forEach(m=>{
     const o=document.createElement('option');o.value=m.id;o.textContent=m.name;rp.appendChild(o);
   });
   buildCollabPicks();
@@ -684,7 +685,7 @@ function buildLabels(){
       buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
     }
   });
-  const filtered=activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner)).filter(t=>!t.archived);
   filtered.forEach((t,ti)=>{
     // ── Independent branch (isBranch trunk) ──
     if(t.isBranch){
@@ -770,8 +771,9 @@ function buildLabels(){
     body.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
-    if(exp[t.id]){bg.classList.add('open');bg.style.height=(t.branches.length*BH())+'px';}else{bg.style.height='0px';}
-    t.branches.forEach((b,bidx)=>{
+    const activeBrL=t.branches.filter(b=>!b.archived);
+    if(exp[t.id]){bg.classList.add('open');bg.style.height=(activeBrL.length*BH())+'px';}else{bg.style.height='0px';}
+    activeBrL.forEach((b,bidx)=>{
       const displayColor=statusObj(b.status||'todo').color;
       const br=document.createElement('div');br.className='lc-br';
       // Fade labels for done/hold
@@ -935,7 +937,32 @@ function showContextMenu(e,trunkId,branchId){
     }
   });
 
-  menu.append(editItem,colorItem,delItem);
+  // Archive/unarchive
+  const archiveItem=document.createElement('div');
+  archiveItem.style.cssText='padding:6px 10px;font-size:11px;cursor:pointer;border-radius:4px;transition:background .1s;';
+  if(branchId){
+    const t2=TRUNKS.find(x=>x.id===trunkId);const b2=t2?.branches.find(x=>x.id===branchId);
+    const isAr=b2?.archived;
+    archiveItem.textContent=isAr?'📤 還原枝幹':'📦 封存枝幹';
+    archiveItem.addEventListener('click',()=>{menu.remove();if(b2){b2.archived=!isAr;saveTrunk(t2);buildLabels();buildTimeline();buildSelects();}});
+  } else {
+    const t2=TRUNKS.find(x=>x.id===trunkId);
+    const isAr=t2?.archived;
+    archiveItem.textContent=isAr?'📤 還原主幹':'📦 封存主幹';
+    archiveItem.addEventListener('click',()=>{
+      menu.remove();
+      if(t2&&confirm(`確定${isAr?'還原':'封存'}主幹「${t2.name}」${isAr?'':'及其所有枝幹'}？`)){
+        t2.archived=!isAr;
+        if(!isAr)t2.branches.forEach(b=>{b.archived=true;});
+        else t2.branches.forEach(b=>{b.archived=false;});
+        saveTrunk(t2);buildLabels();buildTimeline();buildSelects();buildOwnerFilter();updateHeaderRange();
+      }
+    });
+  }
+  archiveItem.addEventListener('mouseenter',()=>archiveItem.style.background='var(--surface2)');
+  archiveItem.addEventListener('mouseleave',()=>archiveItem.style.background='');
+
+  menu.append(editItem,colorItem,archiveItem,delItem);
   document.body.appendChild(menu);
   setTimeout(()=>{
     const close=ev=>{if(!menu.contains(ev.target)){menu.remove();document.removeEventListener('click',close);}};
@@ -1294,7 +1321,7 @@ document.getElementById('dp-close').addEventListener('click',()=>{document.getEl
 // Person picker popover
 function openPersonPop(e,callback){
   const pop=document.getElementById('person-pop');pop.innerHTML='';
-  MEMBERS.forEach(m=>{
+  activeMembers().forEach(m=>{
     const item=document.createElement('div');item.className='pp-item';
     item.appendChild(makeAv(m.id,18));
     const name=document.createElement('span');name.textContent=m.name;item.appendChild(name);
@@ -1317,7 +1344,7 @@ document.addEventListener('click',e=>{
 // ─────────────────────────────────────────────
 function buildTimeline(){
   const rows=document.getElementById('rows');rows.innerHTML='';
-  const filtered=activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner)).filter(t=>!t.archived);
   filtered.forEach(t=>{
     // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
@@ -1370,9 +1397,10 @@ function buildTimeline(){
     rows.appendChild(tr);
 
     const bg=document.createElement('div');bg.className='bgroup';bg.dataset.trunk=t.id;
-    bg.style.height=exp[t.id]?(t.branches.length*BH())+'px':'0px';
+    const activeBranches=t.branches.filter(b=>!b.archived);
+    bg.style.height=exp[t.id]?(activeBranches.length*BH())+'px':'0px';
     if(exp[t.id])setTimeout(()=>bg.classList.add('expanded'),280);
-    t.branches.forEach((b,bidx)=>{
+    activeBranches.forEach((b,bidx)=>{
       const brow=document.createElement('div');brow.className='brow';brow.dataset.branch=b.id;
       // Branch bar color = status color
       const bStatus=b.status||'todo';
@@ -1430,12 +1458,13 @@ function buildTimeline(){
 
 function drawVinePaths(bgEl,trunk){
   const TH=BH();const BranchH=BH();
+  const activeBr=trunk.branches.filter(b=>!b.archived);
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('class','bgroup-svg');
-  svg.setAttribute('viewBox',`0 0 ${tw()} ${trunk.branches.length*BranchH}`);
+  svg.setAttribute('viewBox',`0 0 ${tw()} ${activeBr.length*BranchH}`);
   svg.setAttribute('preserveAspectRatio','none');
 
-  trunk.branches.forEach((b,idx)=>{
+  activeBr.forEach((b,idx)=>{
     const branchY=idx*BranchH+BranchH/2;
     const trunkY=-TH/2;
     const branchX=dx(b.start);
@@ -1704,7 +1733,7 @@ function toggle(id){
   const t=TRUNKS.find(x=>x.id===id);
   if(!t||t.isBranch)return; // independent branches have nothing to toggle
   exp[id]=!exp[id];const open=exp[id];
-  const brH=t.branches.length*BH();
+  const brH=t.branches.filter(b=>!b.archived).length*BH();
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
   // Left column
@@ -1908,7 +1937,7 @@ function setupReplyInput() {
     }
 
     const partial = text.substring(atIndex + 1);
-    const matches = MEMBERS.filter(m => m.name.toLowerCase().includes(partial.toLowerCase()));
+    const matches = activeMembers().filter(m => m.name.toLowerCase().includes(partial.toLowerCase()));
 
     if (matches.length === 0) {
       if (mentionDropdown) mentionDropdown.remove();
@@ -2221,9 +2250,15 @@ function renderMembersSettings(){
     av.textContent=initials(m.name);
     const nm=document.createElement('input');nm.className='s-name';nm.value=m.name;
     nm.addEventListener('change',()=>{m.name=nm.value.trim()||m.name;saveMember(m);renderMembersSettings();buildHeaderAvatars();buildLabels();buildTimeline();buildOwnerFilter();});
+    // Active/inactive toggle
+    const actBtn=document.createElement('button');
+    actBtn.style.cssText=`padding:2px 6px;font-size:9px;border-radius:4px;border:1px solid var(--border);cursor:pointer;min-width:40px;transition:all .12s;${m.active===false?'background:#fce4e4;color:#c62828;':'background:#e8f5e9;color:#2e7d32;'}`;
+    actBtn.textContent=m.active===false?'已停用':'在職';
+    actBtn.addEventListener('click',()=>{m.active=m.active===false?true:false;saveMember(m);renderMembersSettings();buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();});
+    if(m.active===false){row.style.opacity='0.5';}
     const del=document.createElement('button');del.className='s-del';del.textContent='✕';
     del.addEventListener('click',()=>{const delId=m.id;MEMBERS.splice(i,1);deleteMember(delId);renderMembersSettings();buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();});
-    row.append(col,av,nm,del);list.appendChild(row);
+    row.append(col,av,nm,actBtn,del);list.appendChild(row);
   });
   body.appendChild(list);
   // Add new member (single row at bottom)
@@ -2233,7 +2268,7 @@ function renderMembersSettings(){
   const btn=document.createElement('button');btn.textContent='新增';
   btn.addEventListener('click',()=>{
     const name=inp.value.trim();if(!name)return;
-    const newMem={id:'U'+Date.now().toString(36),name,color:colInp.value};
+    const newMem={id:'U'+Date.now().toString(36),name,color:colInp.value,active:true};
     MEMBERS.push(newMem);saveMember(newMem);
     renderMembersSettings();buildHeaderAvatars();buildSelects();buildOwnerFilter();buildDailySelects();
   });
@@ -2380,6 +2415,15 @@ function switchView(view){
   }
 }
 
+let dashShowArchived=false;
+document.getElementById('dash-show-archived').addEventListener('click',function(){
+  dashShowArchived=!dashShowArchived;
+  this.style.opacity=dashShowArchived?'1':'.6';
+  this.style.background=dashShowArchived?'var(--accent)':'';
+  this.style.color=dashShowArchived?'#fff':'';
+  buildDashboard();
+});
+
 function buildDashboard(){
   const body=document.getElementById('dash-body');body.innerHTML='';
 
@@ -2433,7 +2477,8 @@ function buildDashboard(){
   thead.appendChild(htr);table.appendChild(thead);
   const tbody=document.createElement('tbody');
   const dashExp={};
-  TRUNKS.forEach(t=>{
+  const dashTrunks=dashShowArchived?TRUNKS.filter(t=>t.archived):TRUNKS.filter(t=>!t.archived);
+  dashTrunks.forEach(t=>{
     const tr=document.createElement('tr');tr.style.cursor='pointer';
     // Toggle cell
     const togTd=document.createElement('td');togTd.style.cssText='text-align:center;font-size:10px;color:var(--text-dim);width:24px;';
@@ -2488,11 +2533,20 @@ function buildDashboard(){
     });
     noteTd.appendChild(noteArea);
     tr.appendChild(noteTd);
+    // Restore button for archived items
+    if(dashShowArchived){
+      const restoreTd=document.createElement('td');restoreTd.style.textAlign='center';
+      const restoreBtn=document.createElement('button');restoreBtn.textContent='📤 還原';
+      restoreBtn.style.cssText='padding:3px 8px;font-size:10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);cursor:pointer;';
+      restoreBtn.addEventListener('click',e=>{e.stopPropagation();t.archived=false;t.branches.forEach(b=>{b.archived=false;});saveTrunk(t);buildDashboard();buildLabels();buildTimeline();});
+      restoreTd.appendChild(restoreBtn);tr.appendChild(restoreTd);
+    }
     tbody.appendChild(tr);
 
     // Branch sub-rows (initially hidden)
     const brRows=[];
-    t.branches.forEach((b,bidx)=>{
+    const dashBranches=dashShowArchived?t.branches:t.branches.filter(b=>!b.archived);
+    dashBranches.forEach((b,bidx)=>{
       const btr=document.createElement('tr');btr.className='dash-branch-row';btr.style.display='none';
       btr.style.background='var(--surface2)';
       const emTd=document.createElement('td');emTd.textContent='';btr.appendChild(emTd);
@@ -2796,9 +2850,9 @@ function buildDailySelects(){
   const ms=document.getElementById('daily-member');
   const prevMember=ms.value;
   ms.innerHTML='';
-  MEMBERS.forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;ms.appendChild(o);});
+  activeMembers().forEach(m=>{const o=document.createElement('option');o.value=m.id;o.textContent=m.name;ms.appendChild(o);});
   // Restore previous member selection or default
-  if(prevMember&&MEMBERS.find(m=>m.id===prevMember)){ms.value=prevMember;}
+  if(prevMember&&activeMembers().find(m=>m.id===prevMember)){ms.value=prevMember;}
   const dd=document.getElementById('daily-date');
   if(!dd.value)dd.value=todayStr;
   loadDailyEntries();
