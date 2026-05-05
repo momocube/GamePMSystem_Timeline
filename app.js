@@ -639,18 +639,23 @@ function updateHeaderRange(){
 function syncScrollHeights(){
   requestAnimationFrame(()=>{
     const canvas=document.getElementById('canvas');
+    const sa=document.getElementById('sa');
     const lb=document.getElementById('lbody');
     const tl=document.getElementById('tdline');
     const r=document.getElementById('rows');
-    if(!canvas||!lb||!r)return;
+    const dayBg=document.getElementById('day-bg');
+    if(!canvas||!lb||!r||!sa)return;
     const h=r.offsetTop+r.scrollHeight;
     canvas.style.minHeight=h+'px';
     if(tl)tl.style.height=h+'px';
-    // Add/update spacer in lbody to match canvas height
+    if(dayBg)dayBg.style.height=(h-40)+'px';
+    // Spacer: match sa's scrollHeight so lbody can scroll the same distance
     let sp=document.getElementById('lbody-hspacer');
     if(!sp){sp=document.createElement('div');sp.id='lbody-hspacer';sp.style.cssText='flex-shrink:0;pointer-events:none;width:1px;';lb.appendChild(sp);}
+    // Use sa.scrollHeight to ensure lbody can scroll as far as the timeline
+    const saScrollH=sa.scrollHeight;
     const lbNatural=[...lb.children].filter(c=>c.id!=='lbody-hspacer').reduce((s,c)=>s+c.offsetHeight,0);
-    sp.style.height=Math.max(0,h-lbNatural)+'px';
+    sp.style.height=Math.max(0,saScrollH-lbNatural)+'px';
   });
 }
 let dragTrunkIdx=null;
