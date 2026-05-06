@@ -168,6 +168,40 @@ let wkOffset=0; // weeks offset from TODAY's week
 let currentView='timeline';
 
 // ─────────────────────────────────────────────
+// UNDO STACK (Ctrl+Z)
+// ─────────────────────────────────────────────
+const _undoStack=[];
+const UNDO_MAX=30;
+let _lastUndoPush=0;
+function pushUndo(){
+  // Debounce: don't push multiple snapshots for rapid sequential saves
+  const now=Date.now();
+  if(now-_lastUndoPush<300)return;
+  _lastUndoPush=now;
+  _undoStack.push({trunks:JSON.parse(JSON.stringify(TRUNKS)),nodes:JSON.parse(JSON.stringify(NODES))});
+  if(_undoStack.length>UNDO_MAX)_undoStack.shift();
+}
+function popUndo(){
+  if(!_undoStack.length)return false;
+  const snap=_undoStack.pop();
+  TRUNKS.length=0;snap.trunks.forEach(t=>TRUNKS.push(t));
+  NODES.length=0;snap.nodes.forEach(n=>NODES.push(n));
+  // Save all to Firestore
+  TRUNKS.forEach(t=>saveTrunk(t));
+  NODES.forEach(n=>saveNode(n));
+  Object.keys(exp).forEach(k=>{if(!TRUNKS.find(t=>t.id===k))delete exp[k];});
+  TRUNKS.forEach(t=>{if(!(t.id in exp))exp[t.id]=false;});
+  recalcTimeRange();buildLabels();buildTimeline();buildSelects();buildDailySelects();buildOwnerFilter();updateHeaderRange();
+  return true;
+}
+document.addEventListener('keydown',e=>{
+  if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.shiftKey){
+    e.preventDefault();
+    if(popUndo())console.log('↩️ Undo');
+  }
+});
+
+// ─────────────────────────────────────────────
 // FIRESTORE SYNC LAYER
 // ─────────────────────────────────────────────
 let _firestoreReady = false;
@@ -180,10 +214,12 @@ async function fsave(collection, docId, data) {
   catch (e) { console.warn('Firestore save error:', e); }
 }
 function saveTrunk(t) {
+  pushUndo(); // commit any pending pre-change snapshot
   const plain = JSON.parse(JSON.stringify(t));
   fsave('trunks', t.id, plain);
 }
 function saveNode(n) {
+  pushUndo();
   const plain = JSON.parse(JSON.stringify(n));
   plain.id = String(plain.id); // ensure string
   fsave('nodes', String(n.id), plain);
@@ -611,14 +647,15 @@ function buildOwnerFilter(){
   const prev=sel.value||activeOwner;
   sel.innerHTML='';
   const allOpt=document.createElement('option');allOpt.value='all';allOpt.textContent='👤 全部負責人';sel.appendChild(allOpt);
-  const owners=[...new Set(TRUNKS.map(t=>t.owner).filter(Boolean))];
+  const owners=[...new Set([...TRUNKS.map(t=>t.owner),...TRUNKS.flatMap(t=>(t.branches||[]).map(b=>b.owner))].filter(Boolean))];
   owners.forEach(oid=>{
     const m=mem(oid);
     const o=document.createElement('option');o.value=oid;o.textContent=m.name;sel.appendChild(o);
   });
-  // Restore previous selection if still valid
   if(owners.includes(prev)||prev==='all'){sel.value=prev;activeOwner=prev;}
   else{sel.value='all';activeOwner='all';}
+  // Glow when filtering
+  sel.classList.toggle('filter-active',activeOwner!=='all');
 }
 
 // ─────────────────────────────────────────────
@@ -685,7 +722,7 @@ function buildLabels(){
       buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
     }
   });
-  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner)).filter(t=>!t.archived);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner||(t.branches||[]).some(b=>b.owner===activeOwner))).filter(t=>!t.archived);
   filtered.forEach((t,ti)=>{
     // ── Independent branch (isBranch trunk) ──
     if(t.isBranch){
@@ -1223,6 +1260,21 @@ function openBranchDetail(trunkId,branchId,force){
   endLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">截止</span>';endLbl.appendChild(endInp);
   dateRow.append(startLbl,endLbl);dateSec.appendChild(dateRow);body.appendChild(dateSec);
 
+  // Branch owner
+  const bOwnerSec=sec('負責人');
+  const bOwnerRow=document.createElement('div');bOwnerRow.className='dp-people-row';
+  const curBOwner=isIndep?t.owner:(b.owner||'');
+  if(curBOwner){bOwnerRow.appendChild(personChip(curBOwner,()=>{
+    if(isIndep){t.owner='';} else{b.owner='';}
+    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();
+  }));}
+  const bOwnerAdd=document.createElement('div');bOwnerAdd.className='dp-add-person';bOwnerAdd.textContent='+';
+  bOwnerAdd.addEventListener('click',ev=>openPersonPop(ev,mid=>{
+    if(isIndep){t.owner=mid;} else{b.owner=mid;}
+    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();
+  }));
+  bOwnerRow.appendChild(bOwnerAdd);bOwnerSec.appendChild(bOwnerRow);body.appendChild(bOwnerSec);
+
   // Description
   const descSec=sec('枝幹說明');
   const descTA=document.createElement('textarea');descTA.className='dp-desc';descTA.value=b.desc||'';descTA.placeholder='枝幹說明…';
@@ -1344,7 +1396,7 @@ document.addEventListener('click',e=>{
 // ─────────────────────────────────────────────
 function buildTimeline(){
   const rows=document.getElementById('rows');rows.innerHTML='';
-  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner)).filter(t=>!t.archived);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner||(t.branches||[]).some(b=>b.owner===activeOwner))).filter(t=>!t.archived);
   filtered.forEach(t=>{
     // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
@@ -1772,7 +1824,7 @@ function applyF(){
 const _typeFSel=document.getElementById('type-filter-sel');
 if(_typeFSel)_typeFSel.addEventListener('change',function(){activeType=this.value;applyF();});
 const _ownerFSel=document.getElementById('owner-filter-sel');
-if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;buildLabels();buildTimeline();});
+if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;this.classList.toggle('filter-active',activeOwner!=='all');buildLabels();buildTimeline();});
 
 // ─────────────────────────────────────────────
 // NOTIFICATION BELL & MENTIONS
