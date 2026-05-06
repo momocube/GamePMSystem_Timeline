@@ -608,7 +608,7 @@ function buildSelects(){
 }
 function populateBranchSelect(){
   const br=document.getElementById('rpbr');br.innerHTML='';
-  const filtered=rpOwnerFilter==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===rpOwnerFilter);
+  const filtered=(rpOwnerFilter==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===rpOwnerFilter)).filter(t=>!t.archived);
   let totalOpts=0;
   // Independent branches first
   const indeps=filtered.filter(t=>t.isBranch);
@@ -620,11 +620,13 @@ function populateBranchSelect(){
     });
     br.appendChild(grp);
   }
-  // Normal trunks with child branches
+  // Normal trunks with child branches (exclude archived branches)
   filtered.filter(t=>!t.isBranch).forEach(t=>{
+    const activeBr=t.branches.filter(b=>!b.archived);
+    if(!activeBr.length)return;
     const grp=document.createElement('optgroup');
     grp.label=t.name;
-    t.branches.forEach(b=>{
+    activeBr.forEach(b=>{
       const o=document.createElement('option');o.value=b.id;
       o.textContent=b.name;grp.appendChild(o);
       totalOpts++;
@@ -2287,6 +2289,7 @@ function renderSettingsModal(){
   else if(activeSettingsTab==='categories') renderCategoriesSettings();
   else if(activeSettingsTab==='statuses') renderStatusesSettings();
   else if(activeSettingsTab==='priorities') renderPrioritiesSettings();
+  else if(activeSettingsTab==='dailyCats') renderDailyCatsSettings();
 }
 
 function renderMembersSettings(){
@@ -2421,6 +2424,38 @@ function renderPrioritiesSettings(){
     renderPrioritiesSettings();
   });
   addRow.append(inp,colInp,btn);body.appendChild(addRow);
+}
+
+function renderDailyCatsSettings(){
+  const body=document.getElementById('settings-body');body.innerHTML='';
+  const list=document.createElement('div');list.className='settings-list';
+  CATS.forEach((cat,i)=>{
+    const row=document.createElement('div');row.className='settings-row';
+    const col=document.createElement('input');col.type='color';col.className='s-color';col.value=cat.color;
+    col.addEventListener('change',()=>{cat.color=col.value;saveSettings('categories',CATS);renderDailyCatsSettings();});
+    const swatch=document.createElement('div');swatch.style.cssText=`padding:2px 6px;border-radius:8px;font-size:9px;font-weight:600;background:${cat.bg};color:${cat.color};flex-shrink:0;`;swatch.textContent=cat.label;
+    const nm=document.createElement('input');nm.className='s-name';nm.value=cat.label;
+    nm.addEventListener('change',()=>{cat.label=nm.value.trim()||cat.label;saveSettings('categories',CATS);renderDailyCatsSettings();renderDailyEntries();});
+    const bgInp=document.createElement('input');bgInp.type='color';bgInp.className='s-color';bgInp.value=cat.bg;bgInp.title='背景色';
+    bgInp.addEventListener('change',()=>{cat.bg=bgInp.value;saveSettings('categories',CATS);renderDailyCatsSettings();});
+    const del=document.createElement('button');del.className='s-del';del.textContent='✕';
+    del.addEventListener('click',()=>{CATS.splice(i,1);saveSettings('categories',CATS);renderDailyCatsSettings();renderDailyEntries();});
+    row.append(col,swatch,nm,bgInp,del);list.appendChild(row);
+  });
+  body.appendChild(list);
+  const addRow=document.createElement('div');addRow.className='settings-add';
+  const inp=document.createElement('input');inp.type='text';inp.placeholder='新類別名稱';
+  const colInp=document.createElement('input');colInp.type='color';colInp.value='#5a6d82';colInp.style.cssText='width:32px;height:28px;padding:2px;border-radius:4px;border:1px solid var(--border);cursor:pointer;';
+  const bgColInp=document.createElement('input');bgColInp.type='color';bgColInp.value='#f0f0f0';bgColInp.style.cssText='width:32px;height:28px;padding:2px;border-radius:4px;border:1px solid var(--border);cursor:pointer;';bgColInp.title='背景色';
+  const btn=document.createElement('button');btn.textContent='新增';
+  btn.addEventListener('click',()=>{
+    const label=inp.value.trim();if(!label)return;
+    const id='cat'+Date.now().toString(36);
+    CATS.push({id,label,color:colInp.value,bg:bgColInp.value});
+    saveSettings('categories',CATS);
+    renderDailyCatsSettings();renderDailyEntries();
+  });
+  addRow.append(inp,colInp,bgColInp,btn);body.appendChild(addRow);
 }
 
 // ─────────────────────────────────────────────
@@ -2880,12 +2915,11 @@ document.getElementById('btn-collapse-bot').addEventListener('click',()=>{
 // ─────────────────────────────────────────────
 function getAllBranches(){
   const list=[];
-  TRUNKS.forEach(t=>{
+  TRUNKS.filter(t=>!t.archived).forEach(t=>{
     if(t.isBranch){
-      // Independent branch-trunk: branch id = trunk id
       list.push({trunkId:null,trunkName:'(獨立)',trunkColor:t.color,branchId:t.id,branchName:t.name,branchColor:t.color});
     } else {
-      t.branches.forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
+      t.branches.filter(b=>!b.archived).forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
     }
   });
   return list;
