@@ -146,6 +146,30 @@ let PRIORITIES = [
 ];
 function priorityObj(id){ return PRIORITIES.find(p=>p.id===id)||PRIORITIES[2]; }
 function activeMembers(){ return MEMBERS.filter(m=>m.active!==false); }
+function ownerIds(item){
+  if(!item)return [];
+  const ids=[];
+  if(Array.isArray(item.owners))ids.push(...item.owners);
+  if(item.owner)ids.push(item.owner);
+  return [...new Set(ids.filter(Boolean))];
+}
+function setOwnerIds(item,ids){
+  const clean=[...new Set((ids||[]).filter(Boolean))];
+  item.owners=clean;
+  item.owner=clean[0]||''; // keep legacy single-owner field for old data/code
+}
+function addOwnerId(item,mid){
+  if(!mid)return;
+  setOwnerIds(item,[...ownerIds(item),mid]);
+}
+function removeOwnerId(item,mid){
+  setOwnerIds(item,ownerIds(item).filter(id=>id!==mid));
+}
+function itemHasOwner(item,mid){ return ownerIds(item).includes(mid); }
+function displayOwnerIds(item,fallback){
+  const ids=ownerIds(item);
+  return ids.length?ids:(fallback?ownerIds(fallback):[]);
+}
 
 // Derive trunk status from branches (trunk has no own status)
 function deriveTrunkStatus(t){
@@ -578,7 +602,7 @@ function buildSelects(){
   const prevOwner=owf.value||rpOwnerFilter;
   owf.innerHTML='';
   const allOpt=document.createElement('option');allOpt.value='all';allOpt.textContent='👤 全部負責人';owf.appendChild(allOpt);
-  const owners=[...new Set(TRUNKS.map(t=>t.owner).filter(Boolean))];
+  const owners=[...new Set(TRUNKS.flatMap(t=>[...ownerIds(t),...(t.branches||[]).flatMap(b=>ownerIds(b))]).filter(Boolean))];
   owners.forEach(oid=>{
     const m=mem(oid);
     const o=document.createElement('option');o.value=oid;o.textContent=m.name;owf.appendChild(o);
@@ -608,7 +632,7 @@ function buildSelects(){
 }
 function populateBranchSelect(){
   const br=document.getElementById('rpbr');br.innerHTML='';
-  const filtered=(rpOwnerFilter==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===rpOwnerFilter)).filter(t=>!t.archived);
+  const filtered=(rpOwnerFilter==='all'?TRUNKS:TRUNKS.filter(t=>itemHasOwner(t,rpOwnerFilter)||(t.branches||[]).some(b=>itemHasOwner(b,rpOwnerFilter)))).filter(t=>!t.archived);
   let totalOpts=0;
   // Independent branches first
   const indeps=filtered.filter(t=>t.isBranch);
@@ -622,7 +646,7 @@ function populateBranchSelect(){
   }
   // Normal trunks with child branches (exclude archived branches)
   filtered.filter(t=>!t.isBranch).forEach(t=>{
-    const activeBr=t.branches.filter(b=>!b.archived);
+    const activeBr=t.branches.filter(b=>!b.archived&&(rpOwnerFilter==='all'||itemHasOwner(t,rpOwnerFilter)||itemHasOwner(b,rpOwnerFilter)));
     if(!activeBr.length)return;
     const grp=document.createElement('optgroup');
     grp.label=t.name;
@@ -649,7 +673,7 @@ function buildOwnerFilter(){
   const prev=sel.value||activeOwner;
   sel.innerHTML='';
   const allOpt=document.createElement('option');allOpt.value='all';allOpt.textContent='👤 全部負責人';sel.appendChild(allOpt);
-  const owners=[...new Set([...TRUNKS.map(t=>t.owner),...TRUNKS.flatMap(t=>(t.branches||[]).map(b=>b.owner))].filter(Boolean))];
+  const owners=[...new Set(TRUNKS.flatMap(t=>[...ownerIds(t),...(t.branches||[]).flatMap(b=>ownerIds(b))]).filter(Boolean))];
   owners.forEach(oid=>{
     const m=mem(oid);
     const o=document.createElement('option');o.value=oid;o.textContent=m.name;sel.appendChild(o);
@@ -717,14 +741,14 @@ function buildLabels(){
       if(bi===-1)return;
       const [branch]=srcTrunk.branches.splice(bi,1);
       // Create independent trunk from branch
-      const newTrunk={id:branch.id,name:branch.name,color:branch.color||srcTrunk.color,status:'wip',priority:'normal',start:branch.start,end:branch.end||'',owner:srcTrunk.owner||'',collaborators:[],trackers:[],desc:'',links:[],branches:[],isBranch:true};
+      const newTrunk={id:branch.id,name:branch.name,color:branch.color||srcTrunk.color,status:'wip',priority:'normal',start:branch.start,end:branch.end||'',owner:ownerIds(srcTrunk)[0]||'',owners:ownerIds(srcTrunk),collaborators:[],trackers:[],desc:'',links:[],branches:[],isBranch:true};
       TRUNKS.push(newTrunk);
       exp[newTrunk.id]=false;
       saveTrunk(srcTrunk);saveTrunk(newTrunk);
       buildLabels();buildTimeline();buildSelects();buildDailySelects();updateHeaderRange();
     }
   });
-  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner||(t.branches||[]).some(b=>b.owner===activeOwner))).filter(t=>!t.archived);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>itemHasOwner(t,activeOwner)||(t.branches||[]).some(b=>itemHasOwner(b,activeOwner)))).filter(t=>!t.archived);
   filtered.forEach((t,ti)=>{
     // ── Independent branch (isBranch trunk) ──
     if(t.isBranch){
@@ -1174,11 +1198,9 @@ function openDetailPanel(trunkId,force){
   // Owner
   const ownerSec=sec('負責人');
   const ownerRow=document.createElement('div');ownerRow.className='dp-people-row';
-  if(t.owner){
-    ownerRow.appendChild(personChip(t.owner));
-  }
+  displayOwnerIds(t).forEach(mid=>ownerRow.appendChild(personChip(mid,()=>{removeOwnerId(t,mid);saveTrunk(t);openDetailPanel(trunkId,true);buildOwnerFilter();buildSelects();buildDailySelects();})));
   const ownerAdd=document.createElement('div');ownerAdd.className='dp-add-person';ownerAdd.textContent='+';
-  ownerAdd.addEventListener('click',e=>openPersonPop(e,mid=>{t.owner=mid;saveTrunk(t);openDetailPanel(trunkId,true);buildOwnerFilter();}));
+  ownerAdd.addEventListener('click',e=>openPersonPop(e,mid=>{addOwnerId(t,mid);saveTrunk(t);openDetailPanel(trunkId,true);buildOwnerFilter();buildSelects();buildDailySelects();}));
   ownerRow.appendChild(ownerAdd);ownerSec.appendChild(ownerRow);body.appendChild(ownerSec);
 
   // Trackers
@@ -1265,15 +1287,15 @@ function openBranchDetail(trunkId,branchId,force){
   // Branch owner
   const bOwnerSec=sec('負責人');
   const bOwnerRow=document.createElement('div');bOwnerRow.className='dp-people-row';
-  const curBOwner=isIndep?t.owner:(b.owner||'');
-  if(curBOwner){bOwnerRow.appendChild(personChip(curBOwner,()=>{
-    if(isIndep){t.owner='';} else{b.owner='';}
-    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();
-  }));}
+  const bOwnerTarget=isIndep?t:b;
+  displayOwnerIds(bOwnerTarget).forEach(mid=>bOwnerRow.appendChild(personChip(mid,()=>{
+    removeOwnerId(bOwnerTarget,mid);
+    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();buildSelects();buildDailySelects();
+  })));
   const bOwnerAdd=document.createElement('div');bOwnerAdd.className='dp-add-person';bOwnerAdd.textContent='+';
   bOwnerAdd.addEventListener('click',ev=>openPersonPop(ev,mid=>{
-    if(isIndep){t.owner=mid;} else{b.owner=mid;}
-    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();
+    addOwnerId(bOwnerTarget,mid);
+    saveTrunk(t);openBranchDetail(trunkId,branchId,true);buildOwnerFilter();buildSelects();buildDailySelects();
   }));
   bOwnerRow.appendChild(bOwnerAdd);bOwnerSec.appendChild(bOwnerRow);body.appendChild(bOwnerSec);
 
@@ -1398,7 +1420,7 @@ document.addEventListener('click',e=>{
 // ─────────────────────────────────────────────
 function buildTimeline(){
   const rows=document.getElementById('rows');rows.innerHTML='';
-  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>t.owner===activeOwner||(t.branches||[]).some(b=>b.owner===activeOwner))).filter(t=>!t.archived);
+  const filtered=(activeOwner==='all'?TRUNKS:TRUNKS.filter(t=>itemHasOwner(t,activeOwner)||(t.branches||[]).some(b=>itemHasOwner(b,activeOwner)))).filter(t=>!t.archived);
   filtered.forEach(t=>{
     // ── Independent branch-trunk: render as trow (32px) to match left column ──
     if(t.isBranch){
@@ -2587,7 +2609,7 @@ function buildDashboard(){
     tr.appendChild(priTd);
     // Owner
     const ownerTd=document.createElement('td');
-    if(t.owner){const m=mem(t.owner);ownerTd.innerHTML=`<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${m.color};color:#fff;font-size:7px;font-weight:700;text-align:center;line-height:16px;vertical-align:middle;margin-right:4px;">${initials(m.name)}</span>${m.name}`;}
+    const tOwnerIds=displayOwnerIds(t);if(tOwnerIds.length){ownerTd.innerHTML=tOwnerIds.map(mid=>{const m=mem(mid);return `<span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:${m.color};color:#fff;font-size:7px;font-weight:700;text-align:center;line-height:16px;vertical-align:middle;margin-right:4px;">${initials(m.name)}</span>${m.name}`;}).join(' ');}
     tr.appendChild(ownerTd);
     // Collaborators
     const collabTd=document.createElement('td');
@@ -2650,11 +2672,9 @@ function buildDashboard(){
       const bpriTd=document.createElement('td');
       bpriTd.innerHTML=`<span class="dash-status" style="background:${bPriObj.bg};color:${bPriObj.color};">${bPriObj.label}</span>`;
       btr.appendChild(bpriTd);
-      // reporters
+      // owners
       const bOwnerTd=document.createElement('td');
-      const reporters=new Set();
-      NODES.filter(n=>n.branch===b.id).forEach(n=>reporters.add(n.member));
-      reporters.forEach(mid=>{const m=mem(mid);bOwnerTd.innerHTML+=`<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${m.color};color:#fff;font-size:6px;font-weight:700;text-align:center;line-height:14px;margin-right:2px;" title="${m.name}">${initials(m.name)}</span>`;});
+      displayOwnerIds(b,t).forEach(mid=>{const m=mem(mid);bOwnerTd.innerHTML+=`<span style="display:inline-block;width:14px;height:14px;border-radius:50%;background:${m.color};color:#fff;font-size:6px;font-weight:700;text-align:center;line-height:14px;margin-right:2px;" title="${m.name}">${initials(m.name)}</span>`;});
       btr.appendChild(bOwnerTd);
       const bCollabTd=document.createElement('td');btr.appendChild(bCollabTd);
       // dates
@@ -2709,19 +2729,19 @@ function getDashData(){
   const rows=[];
   TRUNKS.forEach(t=>{
     const st=deriveTrunkStatus(t);const pri=priorityObj(t.priority);
-    const owner=t.owner?mem(t.owner).name:'';
+    const owner=displayOwnerIds(t).map(mid=>mem(mid).name).join(', ');
     const collabs=(t.collaborators||[]).map(c=>mem(c).name).join(', ');
     const avgProg=t.branches.length>0?Math.round(t.branches.reduce((s,b)=>s+b.prog,0)/t.branches.length):0;
     const nodeCount=NODES.filter(n=>n.trunk===t.id).length;
     const noteText=t.statusNote||'';
     rows.push({type:'trunk',name:t.name,status:st.label,priority:pri.label,owner,collabs,start:t.start,end:t.end||'∞',prog:avgProg+'%',nodes:nodeCount,latest:noteText});
     t.branches.forEach(b=>{
-      const reporters=[...new Set(NODES.filter(n=>n.branch===b.id).map(n=>mem(n.member).name))].join(', ');
+      const branchOwners=displayOwnerIds(b,t).map(mid=>mem(mid).name).join(', ');
       const bNodeCount=NODES.filter(n=>n.branch===b.id).length;
       const bNodes=NODES.filter(n=>n.branch===b.id).sort((a,bb)=>new Date(bb.date)-new Date(a.date));
       const bLatest=bNodes.length>0?`${bNodes[0].date} ${mem(bNodes[0].member).name}: ${bNodes[0].msg}`:'';
       const bSt=statusObj(b.status||'todo');const bPri=priorityObj(b.priority||'normal');
-      rows.push({type:'branch',name:'  └ '+b.name,status:bSt.label,priority:bPri.label,owner:reporters,collabs:'',start:b.start,end:b.end||'∞',prog:b.prog+'%',nodes:bNodeCount,latest:bLatest});
+      rows.push({type:'branch',name:'  └ '+b.name,status:bSt.label,priority:bPri.label,owner:branchOwners,collabs:'',start:b.start,end:b.end||'∞',prog:b.prog+'%',nodes:bNodeCount,latest:bLatest});
     });
   });
   return rows;
@@ -2917,9 +2937,9 @@ function getAllBranches(){
   const list=[];
   TRUNKS.filter(t=>!t.archived).forEach(t=>{
     if(t.isBranch){
-      list.push({trunkId:null,trunkName:'(獨立)',trunkColor:t.color,branchId:t.id,branchName:t.name,branchColor:t.color});
+      list.push({trunkId:null,trunkName:'(獨立)',trunkColor:t.color,branchId:t.id,branchName:t.name,branchColor:t.color,owners:displayOwnerIds(t)});
     } else {
-      t.branches.filter(b=>!b.archived).forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color});});
+      t.branches.filter(b=>!b.archived).forEach(b=>{list.push({trunkId:t.id,trunkName:t.name,trunkColor:t.color,branchId:b.id,branchName:b.name,branchColor:b.color||t.color,owners:displayOwnerIds(b,t)});});
     }
   });
   return list;
@@ -2945,7 +2965,8 @@ function buildDailySelects(){
 }
 function renderDailyEntries(){
   const c=document.getElementById('daily-entries');c.innerHTML='';
-  const allBranches=getAllBranches();
+  const currentReporter=document.getElementById('daily-member')?.value||'';
+  const allBranches=getAllBranches().filter(b=>!currentReporter||(b.owners||[]).includes(currentReporter));
   dailyEntries.forEach((entry,i)=>{
     // --- Main row ---
     const row=document.createElement('div');row.className='daily-entry'+(entry.done?' done':'');
