@@ -14,7 +14,7 @@
   --notion-red:#fdecec;--notion-blue:#e7f0fd;--notion-green:#edf7f0;
   --notion-orange:#fef3e9;--notion-purple:#f4f0fd;--notion-pink:#fce8f0;
   --shadow:rgba(55,53,47,.08);--shadow2:rgba(55,53,47,.15);
-  --DAY:88px;--trunk-h:44px;--branch-h:112px;--lcol-w:170px;
+  --DAY:88px;--trunk-h:44px;--branch-h:160px;--lcol-w:170px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:14px;}
@@ -726,7 +726,16 @@ function buildTimeline(){
         }
       }
       brow.appendChild(bb);
-      NODES.filter(n=>n.branch===b.id).forEach(n=>addCard(n,brow,t.color,bi));
+      const brNodes=NODES.filter(n=>n.branch===b.id).slice().sort((a,z)=>a.date.localeCompare(z.date));
+      const laneR=[-Infinity,-Infinity];
+      brNodes.forEach(n=>{
+        const cx=dx(n.date)+DP/2,hw=68;
+        let ln=0;
+        for(let i=0;i<2;i++){if(cx-hw>=laneR[i]){ln=i;break;}}
+        if(cx-hw<laneR[0]&&cx-hw<laneR[1])ln=laneR[0]<=laneR[1]?0:1;
+        n._lane=ln;laneR[ln]=cx+hw;
+        addCard(n,brow,t.color,bi,ln);
+      });
       bg.appendChild(brow);
     });
     rows.appendChild(bg);
@@ -747,12 +756,13 @@ function addPills(tr,trunk){
 // ─────────────────────────────────────────────
 // NODE CARD (simplified personnel display)
 // ─────────────────────────────────────────────
-function addCard(n,brow,trunkColor,branchIdx){
+function addCard(n,brow,trunkColor,branchIdx,lane=0){
   const m=mem(n.member);
   const icon=n.type==='milestone'?'🏁':n.type==='meeting'?'📅':n.type==='trip'?'✈️':'📝';
   const w=document.createElement('div');
   w.className='nwrap';w.dataset.id=n.id;w.dataset.type=n.type;w.dataset.member=n.member;
-  w.style.left=dx(n.date)+'px';
+  w.style.left=(dx(n.date)+DP/2)+'px';
+  w.style.top=(lane===0?4:88)+'px';
 
   const avDot=document.createElement('div');
   avDot.className='nav-dot';
@@ -881,7 +891,7 @@ document.getElementById('nmod-save').addEventListener('click',()=>{
   if(oldCard){const parent=oldCard.parentElement;oldCard.remove();
     const t=TRUNKS.find(tr=>tr.id===n.trunk);
     const bi=t?t.branches.findIndex(b=>b.id===n.branch):0;
-    addCard(n,parent,t?t.color:'#aaa',bi);
+    addCard(n,parent,t?t.color:'#aaa',bi,n._lane||0);
   }
   document.getElementById('nmodal').classList.remove('open');
 });
@@ -1020,6 +1030,18 @@ document.getElementById('mm-addbt').addEventListener('click',()=>{
 });
 
 // ─────────────────────────────────────────────
+// LANE HELPER (for dynamic card additions)
+// ─────────────────────────────────────────────
+function getLaneForNode(node){
+  const cx=dx(node.date)+DP/2,hw=68;
+  for(let ln=0;ln<2;ln++){
+    const conflict=NODES.some(n=>n.id!==node.id&&n.branch===node.branch&&(n._lane||0)===ln&&Math.abs(dx(n.date)+DP/2-cx)<hw*2);
+    if(!conflict)return ln;
+  }
+  return 0;
+}
+
+// ─────────────────────────────────────────────
 // TYPE SWITCHING & TRIP TEMPLATE
 // ─────────────────────────────────────────────
 document.querySelectorAll('.tbt').forEach(b=>b.addEventListener('click',()=>{
@@ -1098,7 +1120,7 @@ document.getElementById('subbt').addEventListener('click',()=>{
   if(br){
     const t=TRUNKS.find(tr=>tr.id===tid);
     const bi=t?t.branches.findIndex(b=>b.id===bid):0;
-    const w=addCard(nn,br,t?t.color:'#aaa',bi);w.classList.add('new');applyF();
+    nn._lane=getLaneForNode(nn);const w=addCard(nn,br,t?t.color:'#aaa',bi,nn._lane);w.classList.add('new');applyF();
   }
   buildLabels();
   // reset fields
