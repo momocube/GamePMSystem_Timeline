@@ -835,7 +835,7 @@ function buildLabels(){
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
     const activeBrL=t.branches.filter(b=>!b.archived);
-    if(exp[t.id]){bg.classList.add('open');bg.style.height=activeBrL.reduce((s,b)=>s+getBranchCardHeight(b.id),0)+'px';}else{bg.style.height='0px';}
+    if(exp[t.id]){bg.classList.add('open');bg.style.height=(activeBrL.length*BH())+'px';}else{bg.style.height='0px';}
     activeBrL.forEach((b,bidx)=>{
       const displayColor=statusObj(b.status||'todo').color;
       const br=document.createElement('div');br.className='lc-br';
@@ -886,7 +886,6 @@ function buildLabels(){
         showContextMenu(e,t.id,b.id);
       });
       br.addEventListener('click',e=>{e.stopPropagation();openBranchDetail(t.id,b.id);});
-      br.style.height=getBranchCardHeight(b.id)+'px';
       bg.appendChild(br);
     });
     body.appendChild(bg);
@@ -1441,7 +1440,7 @@ function buildTimeline(){
       // Node bubbles on the trow
       NODES.filter(n=>n.branch===t.id).forEach(n=>addCard(n,tr));
       spreadOverlappingCards(tr);
-      alternateCardPositions(tr);
+      layoutBranchCards(tr);
       tr.style.cursor='pointer';
       tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openBranchDetail(t.id,t.id);});
       rows.appendChild(tr);
@@ -1468,7 +1467,7 @@ function buildTimeline(){
       const allBranchNodes=NODES.filter(n=>t.branches.some(b=>b.id===n.branch));
       allBranchNodes.forEach(n=>addCard(n,tr));
       spreadOverlappingCards(tr);
-      alternateCardPositions(tr);
+      layoutBranchCards(tr);
     }
     tr.addEventListener('click',e=>{if(!e.target.closest('.nwrap')){toggle(t.id);openDetailPanel(t.id);}});
     rows.appendChild(tr);
@@ -1518,12 +1517,11 @@ function buildTimeline(){
       NODES.filter(n=>n.branch===b.id).forEach(n=>addCard(n,brow));
       spreadOverlappingCards(brow);
       layoutBranchCards(brow);
-      brow.style.height=getBranchCardHeight(b.id)+'px';
       brow.style.cursor='pointer';
       brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openBranchDetail(t.id,b.id);});
       bg.appendChild(brow);
     });
-    bg.style.height=exp[t.id]?activeBranches.reduce((s,b)=>s+getBranchCardHeight(b.id),0)+'px':'0px';
+    bg.style.height=exp[t.id]?(activeBranches.length*BH())+'px':'0px';
     if(exp[t.id])drawVinePaths(bg,t);
     rows.appendChild(bg);
   });
@@ -1534,24 +1532,20 @@ function buildTimeline(){
 }
 
 function drawVinePaths(bgEl,trunk){
-  const TH=BH();
+  const TH=BH();const BranchH=BH();
   const activeBr=trunk.branches.filter(b=>!b.archived);
-  const totalH=activeBr.reduce((s,b)=>s+getBranchCardHeight(b.id),0);
   const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
   svg.setAttribute('class','bgroup-svg');
-  svg.setAttribute('viewBox',`0 0 ${tw()} ${totalH}`);
+  svg.setAttribute('viewBox',`0 0 ${tw()} ${activeBr.length*BranchH}`);
   svg.setAttribute('preserveAspectRatio','none');
 
-  let cumY=0;
   activeBr.forEach((b,idx)=>{
-    const brH=getBranchCardHeight(b.id);
-    const branchY=cumY+brH/2;
-    cumY+=brH;
+    const branchY=idx*BranchH+BranchH/2;
     const trunkY=-TH/2;
     const branchX=dx(b.start);
     const path=document.createElementNS('http://www.w3.org/2000/svg','path');
     const branchColor=statusObj(b.status||'todo').color;
-    const d=`M ${branchX} ${trunkY} C ${branchX} ${trunkY+brH*0.3}, ${branchX} ${branchY-brH*0.3}, ${branchX} ${branchY}`;
+    const d=`M ${branchX} ${trunkY} C ${branchX} ${trunkY+BranchH*0.3}, ${branchX} ${branchY-BranchH*0.3}, ${branchX} ${branchY}`;
     path.setAttribute('d',d);
     path.setAttribute('stroke',branchColor);
     path.setAttribute('class','vine-path');
