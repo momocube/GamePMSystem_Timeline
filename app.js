@@ -2608,8 +2608,10 @@ function buildDashboard(){
   const tbody=document.createElement('tbody');
   const dashExp={};
   const dashTrunks=dashShowArchived?TRUNKS.filter(t=>t.archived):TRUNKS.filter(t=>!t.archived);
-  dashTrunks.forEach(t=>{
-    const tr=document.createElement('tr');tr.style.cursor='pointer';
+  const DASH_TRUNK_PALETTE=['#f0f4ff','#fff8f0','#f0fff6','#fdf4ff','#fff5f5','#f0faff'];
+  dashTrunks.forEach((t,ti)=>{
+    const trBg=DASH_TRUNK_PALETTE[ti%DASH_TRUNK_PALETTE.length];
+    const tr=document.createElement('tr');tr.className='dash-trunk-row';tr.style.cssText=`cursor:pointer;background:${trBg};`;
     // Toggle cell
     const togTd=document.createElement('td');togTd.style.cssText='text-align:center;font-size:10px;color:var(--text-dim);width:24px;';
     togTd.textContent=t.branches.length>0?'▶':'';
@@ -2657,6 +2659,7 @@ function buildDashboard(){
     noteArea.value=t.statusNote||'';
     noteArea.placeholder='填寫專案狀況…';
     noteArea.addEventListener('click',e=>e.stopPropagation());
+    noteArea.addEventListener('input',()=>{noteArea.style.height='auto';noteArea.style.height=noteArea.scrollHeight+'px';});
     noteArea.addEventListener('blur',()=>{
       t.statusNote=noteArea.value;
       saveTrunk(t);
@@ -2724,6 +2727,9 @@ function buildDashboard(){
     });
   });
   table.appendChild(tbody);body.appendChild(table);
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.dash-note-input').forEach(el=>{el.style.height='auto';el.style.height=el.scrollHeight+'px';});
+  });
 
   // Update week label
   const weekLabel=document.getElementById('dash-week-label');

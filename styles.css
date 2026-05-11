@@ -462,7 +462,8 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .status-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:8px;font-weight:600;white-space:nowrap;margin-left:4px;vertical-align:middle;}
 .status-sel{font-size:8px;padding:1px 4px;border-radius:8px;border:1px solid var(--border);cursor:pointer;outline:none;max-width:60px;background:var(--surface2);color:var(--text-mid);font-family:'Noto Sans TC',sans-serif;margin-left:3px;}
 .dash-branch-row td{font-size:11px;color:var(--text-mid);}
-.dash-note-input{width:100%;min-height:36px;max-height:80px;padding:5px 8px;font-size:11px;font-family:'Noto Sans TC',sans-serif;border:1px solid transparent;border-radius:4px;background:transparent;color:#1565c0;font-weight:500;resize:vertical;outline:none;line-height:1.5;transition:border-color .15s,background .15s;}
+.dash-trunk-row td{background:inherit;}
+.dash-note-input{width:100%;min-height:36px;padding:5px 8px;font-size:11px;font-family:'Noto Sans TC',sans-serif;border:1px solid transparent;border-radius:4px;background:transparent;color:#1565c0;font-weight:500;resize:none;overflow:hidden;outline:none;line-height:1.5;transition:border-color .15s,background .15s;}
 .dash-note-input:hover{border-color:var(--border);background:var(--surface2);}
 .dash-note-input:focus{border-color:#1565c0;background:#e3f2fd;}
 
