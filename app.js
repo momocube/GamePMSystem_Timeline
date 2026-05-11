@@ -1466,9 +1466,10 @@ function buildTimeline(){
     // Trunk bar: neutral or red for urgent
     const tIsUrgent=t.priority==='highest'||t.priority==='high';
     const bar=document.createElement('div');bar.className='tbar';
+    const tEndX=t.end?dx(t.end):tw();
     bar.style.cssText=tIsUrgent
-      ?`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#dc2626;border:1.5px solid #b91c1c;opacity:.85`
-      :`left:${dx(t.start)}px;width:${dx(t.end)-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1`;
+      ?`left:${dx(t.start)}px;width:${tEndX-dx(t.start)}px;background:#dc2626;border:1.5px solid #b91c1c;opacity:.85`
+      :`left:${dx(t.start)}px;width:${tEndX-dx(t.start)}px;background:#f5f3ef;border:1.5px solid #999;opacity:1`;
     // Drag handles on trunk bar
     const tLH=document.createElement('div');tLH.className='bar-handle bar-handle-l';
     const tRH=document.createElement('div');tRH.className='bar-handle bar-handle-r';
