@@ -821,6 +821,7 @@ function buildLabels(){
     const addBrBtn=document.createElement('span');addBrBtn.className='lc-add-br-inline';addBrBtn.textContent='＋';addBrBtn.title='新增枝幹';
     addBrBtn.addEventListener('click',e=>{e.stopPropagation();openAddBranchModal(t.id);});
     tr.append(drag,ca,nm,addBrBtn);
+    if(!exp[t.id]){tr.style.height=getCollapsedTrunkHeight(t)+'px';}
     // Right-click context menu for edit/delete
     tr.addEventListener('contextmenu',e=>{
       e.preventDefault();e.stopPropagation();
@@ -1478,6 +1479,7 @@ function buildTimeline(){
     tr.appendChild(bar);
     if(!exp[t.id]){
       // Collapsed: only show trunk bar + node bubbles (no branch pills)
+      tr.style.height=getCollapsedTrunkHeight(t)+'px';
       const allBranchNodes=NODES.filter(n=>t.branches.some(b=>b.id===n.branch));
       allBranchNodes.forEach(n=>addCard(n,tr));
       spreadOverlappingCards(tr);
@@ -1821,6 +1823,21 @@ function getBranchCardHeight(branchId){
     lanes[li]=x+CARD_LANE_W;
   });
   return Math.max(BH(),CARD_LANE_TOP+lanes.length*CARD_LANE_H);
+}
+
+function getCollapsedTrunkHeight(t){
+  const activeBranches=t.branches.filter(b=>!b.archived);
+  const allNodes=NODES.filter(n=>activeBranches.some(b=>b.id===n.branch));
+  if(!allNodes.length)return 32;
+  const dates=[...new Set(allNodes.map(n=>n.date))].sort();
+  const lanes=[];
+  dates.forEach(date=>{
+    const x=dx(date)+DP/2;
+    let li=lanes.findIndex(r=>x>=r+CARD_LANE_GAP);
+    if(li===-1){li=lanes.length;lanes.push(-Infinity);}
+    lanes[li]=x+CARD_LANE_W;
+  });
+  return Math.max(32,CARD_LANE_TOP+lanes.length*CARD_LANE_H);
 }
 
 function layoutBranchCards(brow){
