@@ -1814,7 +1814,8 @@ function setupBarDrag(barEl,dataObj,trunk,kind){
 
 const CARD_LANE_W=133;
 const CARD_LANE_H=64;
-const CARD_LANE_TOP=32;
+const BRANCH_CARD_TOP=48; // cards start below BH() so bar stays centered in header zone
+const TRUNK_CARD_TOP=32;  // collapsed trunk: cards start at trow height
 const CARD_LANE_GAP=6;
 
 function getBranchCardHeight(branchId){
@@ -1827,7 +1828,7 @@ function getBranchCardHeight(branchId){
     if(li===-1){li=lanes.length;lanes.push(-Infinity);}
     lanes[li]=x+CARD_LANE_W;
   });
-  return Math.max(BH(),CARD_LANE_TOP+lanes.length*CARD_LANE_H);
+  return Math.max(BH(),BRANCH_CARD_TOP+lanes.length*CARD_LANE_H);
 }
 
 function getCollapsedTrunkHeight(t){
@@ -1842,10 +1843,12 @@ function getCollapsedTrunkHeight(t){
     if(li===-1){li=lanes.length;lanes.push(-Infinity);}
     lanes[li]=x+CARD_LANE_W;
   });
-  return Math.max(32,CARD_LANE_TOP+lanes.length*CARD_LANE_H);
+  return Math.max(32,TRUNK_CARD_TOP+lanes.length*CARD_LANE_H);
 }
 
-function layoutBranchCards(brow){
+function layoutBranchCards(brow,cardTop){
+  const top=cardTop!==undefined?cardTop:
+    (brow.classList.contains('trow')?TRUNK_CARD_TOP:BRANCH_CARD_TOP);
   const visible=[...brow.querySelectorAll('.nwrap')]
     .filter(c=>c.style.display!=='none')
     .sort((a,b)=>parseFloat(a.style.left)-parseFloat(b.style.left));
@@ -1854,7 +1857,7 @@ function layoutBranchCards(brow){
     const x=parseFloat(card.style.left);
     let li=lanes.findIndex(r=>x>=r+CARD_LANE_GAP);
     if(li===-1){li=lanes.length;lanes.push(-Infinity);}
-    card.style.top=(CARD_LANE_TOP+li*CARD_LANE_H)+'px';
+    card.style.top=(top+li*CARD_LANE_H)+'px';
     lanes[li]=x+CARD_LANE_W;
   });
 }
