@@ -836,7 +836,8 @@ function buildLabels(){
 
     const bg=document.createElement('div');bg.className='lc-bg';bg.dataset.trunk=t.id;
     const activeBrL=t.branches.filter(b=>!b.archived);
-    if(exp[t.id]){bg.classList.add('open');bg.style.height=(activeBrL.length*BH())+'px';}else{bg.style.height='0px';}
+    const totalBrHL=exp[t.id]?activeBrL.reduce((s,b)=>s+getBranchCardHeight(b.id),0):0;
+    if(exp[t.id]){bg.classList.add('open');bg.style.height=totalBrHL+'px';}else{bg.style.height='0px';}
     activeBrL.forEach((b,bidx)=>{
       const displayColor=statusObj(b.status||'todo').color;
       const br=document.createElement('div');br.className='lc-br';
@@ -881,6 +882,7 @@ function buildLabels(){
       durEl.textContent=dur!=null?`⏱ ${dur} 天`:'⏱ 無截止日';
       br.appendChild(durEl);
       // (progress bar and collaborator avatars removed)
+      br.style.height=getBranchCardHeight(b.id)+'px';
       br.style.cursor='pointer';
       br.addEventListener('contextmenu',e=>{
         e.preventDefault();e.stopPropagation();
@@ -1533,11 +1535,14 @@ function buildTimeline(){
       NODES.filter(n=>n.branch===b.id).forEach(n=>addCard(n,brow));
       spreadOverlappingCards(brow);
       layoutBranchCards(brow);
+      const bRowH=getBranchCardHeight(b.id);
+      brow.style.height=bRowH+'px';
       brow.style.cursor='pointer';
       brow.addEventListener('click',e=>{if(!e.target.closest('.nwrap'))openBranchDetail(t.id,b.id);});
       bg.appendChild(brow);
     });
-    bg.style.height=exp[t.id]?(activeBranches.length*BH())+'px':'0px';
+    const totalBrH=exp[t.id]?activeBranches.reduce((s,b)=>s+getBranchCardHeight(b.id),0):0;
+    bg.style.height=exp[t.id]?totalBrH+'px':'0px';
     if(exp[t.id])drawVinePaths(bg,t);
     rows.appendChild(bg);
   });
@@ -1861,19 +1866,20 @@ function toggle(id){
   const t=TRUNKS.find(x=>x.id===id);
   if(!t||t.isBranch)return; // independent branches have nothing to toggle
   exp[id]=!exp[id];const open=exp[id];
-  const brH=t.branches.filter(b=>!b.archived).length*BH();
+  const activeBrs=t.branches.filter(b=>!b.archived);
+  const totalBrH=activeBrs.reduce((s,b)=>s+getBranchCardHeight(b.id),0);
   const ca=document.querySelector(`.lc-trunk[data-trunk="${id}"] .lc-caret`);
   ca&&(open?ca.classList.add('open'):ca.classList.remove('open'));
   // Left column
   const lb=document.querySelector(`.lc-bg[data-trunk="${id}"]`);
   if(lb){
-    if(open){lb.classList.add('open');lb.style.height=brH+'px';}
+    if(open){lb.classList.add('open');lb.style.height=totalBrH+'px';}
     else{lb.classList.remove('open');lb.style.height='0px';}
   }
   // Timeline
   const tb=document.querySelector(`.bgroup[data-trunk="${id}"]`);
   if(tb){
-    if(open){tb.style.height=brH+'px';setTimeout(()=>tb.classList.add('expanded'),280);}
+    if(open){tb.style.height=totalBrH+'px';setTimeout(()=>tb.classList.add('expanded'),280);}
     else{tb.classList.remove('expanded');tb.style.height='0px';}
   }
   const tr=document.querySelector(`.trow[data-trunk="${id}"]`);
