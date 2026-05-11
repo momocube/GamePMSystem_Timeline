@@ -2975,19 +2975,16 @@ function renderDailyEntries(){
     const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!entry.done;cb.className='daily-cb';
     cb.addEventListener('change',()=>{
       if(cb.checked){
-        // Validate: must have branch + note before completing
-        if(!entry.branchId||!entry.note.trim()){
+        const needBranch=entry.cat!=='leave';
+        if((needBranch&&!entry.branchId)||!entry.note.trim()){
           cb.checked=false;
-          if(!entry.branchId) shakeEl(row.querySelector('.daily-branch-sel'));
+          if(needBranch&&!entry.branchId) shakeEl(row.querySelector('.daily-branch-sel'));
           if(!entry.note.trim()) shakeEl(row.querySelector('.daily-note-input'));
           return;
         }
         dailyEntries[i].done=true;
-        autoGenerateReport(i);
       }else{
-        // Undo: uncheck → remove the auto-generated node
         dailyEntries[i].done=false;
-        undoAutoReport(i);
       }
       renderDailyEntries();
       autoSyncDaily();
@@ -3013,6 +3010,7 @@ function renderDailyEntries(){
       brSel.style.borderLeft=matched?'3px solid '+matched.branchColor:'';
       autoSyncDaily();
     });
+    if(entry.cat==='leave') brSel.style.display='none';
 
     // Category selector
     const catSel=document.createElement('select');catSel.className='daily-cat-sel';
@@ -3023,6 +3021,14 @@ function renderDailyEntries(){
       dailyEntries[i].cat=catSel.value;
       const sc=catObj(catSel.value);
       catSel.style.background=sc.bg;catSel.style.color=sc.color;
+      if(catSel.value==='leave'){
+        brSel.style.display='none';
+        dailyEntries[i].branchId='';
+        brSel.value='';
+        brSel.style.borderLeft='';
+      }else{
+        brSel.style.display='';
+      }
       autoSyncDaily();
     });
 
@@ -3044,22 +3050,7 @@ function renderDailyEntries(){
     const rm=document.createElement('button');rm.className='daily-rm';rm.textContent='✕';
     rm.addEventListener('click',()=>{if(dailyEntries.length>1){dailyEntries.splice(i,1);renderDailyEntries();autoSyncDaily();}});
 
-    // Auto-report indicator
-    if(entry._reportGenerated){
-      const badge=document.createElement('span');badge.className='daily-reported-badge';badge.textContent='✓ 已回報';
-      row.append(cb,brSel,catSel,inp,badge,expBtn,rm);
-      // Click completed entry → scroll timeline to that node
-      if(entry._reportNodeId){
-        row.style.cursor='pointer';
-        row.title='點擊跳轉到時間軸上的回報';
-        row.addEventListener('click',(e)=>{
-          if(e.target.closest('select,input,button,.daily-cb'))return;
-          scrollToNode(entry._reportNodeId);
-        });
-      }
-    }else{
-      row.append(cb,brSel,catSel,inp,expBtn,rm);
-    }
+    row.append(cb,brSel,catSel,inp,expBtn,rm);
     c.appendChild(row);
 
     // --- Expandable detail row ---
@@ -3140,46 +3131,6 @@ function isDayOff(dateStr){
   return false;
 }
 
-// Auto-generate a progress report node when a todo is checked done
-function autoGenerateReport(idx){
-  const entry=dailyEntries[idx];
-  if(!entry.branchId||!entry.note.trim())return;
-  let tid=trunkForBranch(entry.branchId);
-  if(!tid)return;
-  const date=document.getElementById('daily-date').value||todayStr;
-  const member=document.getElementById('daily-member').value||MEMBERS[0].id;
-  let msg=entry.note.trim();
-  if(entry.statusNote&&entry.statusNote.trim()){
-    msg+='\n\n📋 狀態說明：'+entry.statusNote.trim();
-  }
-  const nodeLinks=(entry.links&&entry.links.length)?[...entry.links]:[];
-  const newId=++NC;
-  const nn={id:newId,trunk:tid,branch:entry.branchId,type:'update',date,member,collaborators:[],msg,notes:'',images:[],links:nodeLinks};
-  NODES.push(nn);saveNode(nn);
-  if(!exp[tid]){exp[tid]=true;}
-  buildLabels();buildTimeline();
-  if(openTrunkId===tid)openDetailPanel(tid);
-  // Store the node ID so we can undo later
-  dailyEntries[idx]._reportGenerated=true;
-  dailyEntries[idx]._reportNodeId=newId;
-}
-
-// Undo auto-generated report
-function undoAutoReport(idx){
-  const entry=dailyEntries[idx];
-  if(!entry._reportGenerated||!entry._reportNodeId)return;
-  const nodeId=entry._reportNodeId;
-  // Remove from NODES array
-  const ni=NODES.findIndex(n=>n.id===nodeId);
-  if(ni!==-1)NODES.splice(ni,1);
-  // Remove from Firestore
-  if(typeof db!=='undefined'){
-    db.collection('nodes').doc(String(nodeId)).delete().catch(()=>{});
-  }
-  entry._reportGenerated=false;
-  entry._reportNodeId=null;
-  buildLabels();buildTimeline();
-}
 
 // Load entries for a specific date+member from DAILY_REPORTS into dailyEntries
 function loadDailyEntries(){
