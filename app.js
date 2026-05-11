@@ -1183,6 +1183,19 @@ function openDetailPanel(trunkId,force){
   document.getElementById('dp-hdr-name').textContent=t.name;
   const body=document.getElementById('dp-body');body.innerHTML='';
 
+  // Dates
+  const dateSec=sec('時間軸日期');
+  const dateRow=document.createElement('div');dateRow.style.cssText='display:flex;gap:6px;';
+  const startInp=document.createElement('input');startInp.type='date';startInp.value=t.start||'';startInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);';
+  startInp.addEventListener('change',()=>{t.start=startInp.value;saveTrunk(t);recalcTimeRange();buildTimeline();buildLabels();updateHeaderRange();});
+  const endInp=document.createElement('input');endInp.type='date';endInp.value=t.end||'';endInp.style.cssText='flex:1;padding:4px 6px;font-size:11px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);';
+  endInp.addEventListener('change',()=>{t.end=endInp.value||null;saveTrunk(t);recalcTimeRange();buildTimeline();buildLabels();updateHeaderRange();});
+  const startLbl=document.createElement('div');startLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
+  startLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">開始</span>';startLbl.appendChild(startInp);
+  const endLbl=document.createElement('div');endLbl.style.cssText='display:flex;flex-direction:column;flex:1;gap:2px;';
+  endLbl.innerHTML='<span style="font-size:8px;color:var(--text-dim);">截止</span>';endLbl.appendChild(endInp);
+  dateRow.append(startLbl,endLbl);dateSec.appendChild(dateRow);body.appendChild(dateSec);
+
   // Priority
   const priSec=sec('優先度');
   const priRow=document.createElement('div');priRow.style.cssText='display:flex;flex-wrap:wrap;gap:4px;';
