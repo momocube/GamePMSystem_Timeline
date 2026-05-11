@@ -402,7 +402,7 @@ function makeAv(mid, size=22, extra=''){
 function addDays(dateStr,n){ const d=new Date(dateStr+'T00:00:00');d.setDate(d.getDate()+n);return d.toISOString().split('T')[0]; }
 function getWeekStart(dateStr){ const d=new Date(dateStr+'T00:00:00');const day=d.getDay();d.setDate(d.getDate()-((day===0)?6:(day-1)));return d.toISOString().split('T')[0]; }
 function catObj(id){ return CATS.find(c=>c.id===id)||CATS.find(c=>c.label===id)||CATS.find(c=>c.id==='misc')||CATS[0]; }
-const todayStr=TODAY.toISOString().split('T')[0];
+let todayStr=TODAY.toISOString().split('T')[0];
 
 // ─────────────────────────────────────────────
 // COLOR UTILITIES
@@ -3412,6 +3412,16 @@ const USE_LOCAL = false;
   render();
   setupReplyInput();
   updateNotifyBadge();
+
+  // Auto-update today's date at midnight without requiring a page refresh
+  setInterval(()=>{
+    const newDay=new Date().toISOString().split('T')[0];
+    if(newDay!==todayStr){
+      todayStr=newDay;
+      buildLabels();buildTimeline();alignTodayLine();updateNotifyBadge();
+      if(document.getElementById('weekly-panel').style.display==='flex')buildWeekly();
+    }
+  },60000);
 
   // Check URL for ?node=xxx parameter and auto-open node
   const params = new URLSearchParams(window.location.search);
