@@ -1819,16 +1819,9 @@ const TRUNK_CARD_TOP=32;  // collapsed trunk: cards start at trow height
 const CARD_LANE_GAP=6;
 
 function getBranchCardHeight(branchId){
-  const dates=[...new Set(NODES.filter(n=>n.branch===branchId).map(n=>n.date))].sort();
-  if(!dates.length)return BH();
-  const lanes=[];
-  dates.forEach(date=>{
-    const x=dx(date)+DP/2;
-    let li=lanes.findIndex(r=>x>=r+CARD_LANE_GAP);
-    if(li===-1){li=lanes.length;lanes.push(-Infinity);}
-    lanes[li]=x+CARD_LANE_W;
-  });
-  return Math.max(BH(),BRANCH_CARD_TOP+lanes.length*CARD_LANE_H);
+  const hasCards=NODES.some(n=>n.branch===branchId);
+  // Fixed 2-lane stagger: always reserve 2 lanes when there are cards
+  return hasCards?BRANCH_CARD_TOP+2*CARD_LANE_H:BH();
 }
 
 function getCollapsedTrunkHeight(t){
@@ -1847,19 +1840,27 @@ function getCollapsedTrunkHeight(t){
 }
 
 function layoutBranchCards(brow,cardTop){
-  const top=cardTop!==undefined?cardTop:
-    (brow.classList.contains('trow')?TRUNK_CARD_TOP:BRANCH_CARD_TOP);
+  const isTrunk=brow.classList.contains('trow');
+  const top=cardTop!==undefined?cardTop:(isTrunk?TRUNK_CARD_TOP:BRANCH_CARD_TOP);
   const visible=[...brow.querySelectorAll('.nwrap')]
     .filter(c=>c.style.display!=='none')
     .sort((a,b)=>parseFloat(a.style.left)-parseFloat(b.style.left));
-  const lanes=[];
-  visible.forEach(card=>{
-    const x=parseFloat(card.style.left);
-    let li=lanes.findIndex(r=>x>=r+CARD_LANE_GAP);
-    if(li===-1){li=lanes.length;lanes.push(-Infinity);}
-    card.style.top=(top+li*CARD_LANE_H)+'px';
-    lanes[li]=x+CARD_LANE_W;
-  });
+  if(isTrunk){
+    // Trunk collapsed: swim-lane algorithm
+    const lanes=[];
+    visible.forEach(card=>{
+      const x=parseFloat(card.style.left);
+      let li=lanes.findIndex(r=>x>=r+CARD_LANE_GAP);
+      if(li===-1){li=lanes.length;lanes.push(-Infinity);}
+      card.style.top=(top+li*CARD_LANE_H)+'px';
+      lanes[li]=x+CARD_LANE_W;
+    });
+  } else {
+    // Branch rows: fixed 2-lane stagger (odd=top, even=bottom)
+    visible.forEach((card,i)=>{
+      card.style.top=(top+(i%2)*CARD_LANE_H)+'px';
+    });
+  }
 }
 
 // ─────────────────────────────────────────────
