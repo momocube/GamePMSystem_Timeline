@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>枝幹時間軸</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
 :root{
@@ -246,6 +248,18 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 
 @keyframes pop{0%{transform:translateX(-50%) scale(0);opacity:0;}65%{transform:translateX(-50%) scale(1.08);}100%{transform:translateX(-50%) scale(1);opacity:1;}}
 .nwrap.new{animation:pop .3s cubic-bezier(.34,1.56,.64,1) forwards;}
+
+/* ── AUTH UI ── */
+#auth-area{display:flex;align-items:center;gap:6px;}
+.auth-login-btn{padding:3px 10px;border-radius:4px;font-size:11px;font-weight:500;border:1px solid var(--border);background:var(--surface2);color:var(--text-mid);cursor:pointer;display:flex;align-items:center;gap:5px;transition:all .12s;}
+.auth-login-btn:hover{background:var(--surface3);}
+.auth-user{display:none;align-items:center;gap:6px;}
+.auth-user.show{display:flex;}
+.auth-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid var(--border);}
+.auth-name{font-size:11px;font-weight:500;color:var(--text-mid);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.auth-no-match{font-size:9px;color:var(--red);font-family:'DM Mono',monospace;}
+.auth-logout{font-size:10px;color:var(--text-dim);cursor:pointer;padding:2px 6px;border-radius:3px;border:1px solid var(--border);background:transparent;transition:all .12s;}
+.auth-logout:hover{background:var(--surface2);}
 </style>
 </head>
 <body>
@@ -264,6 +278,19 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
     <div class="hdr-sep"></div>
     <div class="av-row" id="mavs"></div>
     <button class="btn-members" id="btn-mm">👥 成員管理</button>
+    <div class="hdr-sep"></div>
+    <div id="auth-area">
+      <button class="auth-login-btn" id="auth-login-btn">
+        <svg width="12" height="12" viewBox="0 0 18 18" style="flex-shrink:0"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+        Google 登入
+      </button>
+      <div class="auth-user" id="auth-user">
+        <img class="auth-avatar" id="auth-avatar" src="" alt="">
+        <span class="auth-name" id="auth-name"></span>
+        <span class="auth-no-match" id="auth-no-match" style="display:none">⚠ 帳號未綁定</span>
+        <button class="auth-logout" id="auth-logout">登出</button>
+      </div>
+    </div>
   </div>
 </header>
 <div id="main">
@@ -414,11 +441,11 @@ const TODAY = new Date('2024-04-20');
 const DP = 88;
 
 let MEMBERS = [
-  {id:'M',name:'Momo',color:'#6492c5'},
-  {id:'K',name:'Kai', color:'#c97b7b'},
-  {id:'L',name:'Lin', color:'#6aaa82'},
-  {id:'R',name:'Ray', color:'#d4924a'},
-  {id:'T',name:'Taro',color:'#9b7dc8'},
+  {id:'M',name:'Momo',color:'#6492c5',email:''},
+  {id:'K',name:'Kai', color:'#c97b7b',email:''},
+  {id:'L',name:'Lin', color:'#6aaa82',email:''},
+  {id:'R',name:'Ray', color:'#d4924a',email:''},
+  {id:'T',name:'Taro',color:'#9b7dc8',email:''},
 ];
 
 const NOTION_COLORS = [
@@ -459,6 +486,7 @@ let currentNodeId=null,slIdx=0,slImgs=[];
 let progTarget=null;
 let addMode='trunk'; // 'trunk' or 'branch'
 let addParentTrunkId=null;
+let auth=null,currentUser=null,currentMember=null;
 
 // ─────────────────────────────────────────────
 // UTILS
@@ -569,6 +597,14 @@ function buildSelects(){
   MEMBERS.forEach(m=>{
     const o=document.createElement('option');o.value=m.id;o.textContent=m.name;rp.appendChild(o);
   });
+  if(currentMember){
+    rp.value=currentMember.id;
+    rp.disabled=true;
+    rp.style.cssText='opacity:.6;cursor:default;';
+  } else {
+    rp.disabled=false;
+    rp.style.cssText='';
+  }
   buildCollabPicks();
 }
 
@@ -1144,6 +1180,50 @@ document.getElementById('subbt').addEventListener('click',()=>{
   sa.addEventListener('touchstart',e=>{sx=e.touches[0].clientX;sl=sa.scrollLeft;},{passive:true});
   sa.addEventListener('touchmove',e=>{sa.scrollLeft=sl-(e.touches[0].clientX-sx);},{passive:true});
 })();
+
+// ─────────────────────────────────────────────
+// FIREBASE AUTH
+// ─────────────────────────────────────────────
+const FIREBASE_CONFIG={
+  apiKey:    '',  // Firebase Console → 專案設定 → 您的應用程式 → apiKey
+  authDomain:'',  // 例：game-pm-system02.firebaseapp.com
+  projectId: '',  // 例：game-pm-system02
+};
+
+function signInWithGoogle(){
+  if(!auth)return;
+  auth.signInWithPopup(new firebase.auth.GoogleAuthProvider())
+    .catch(e=>alert('登入失敗：'+e.message));
+}
+function signOutUser(){if(auth)auth.signOut();}
+
+function updateAuthUI(user,member){
+  const loginBtn=document.getElementById('auth-login-btn');
+  const userEl=document.getElementById('auth-user');
+  if(user){
+    loginBtn.style.display='none';
+    userEl.classList.add('show');
+    document.getElementById('auth-avatar').src=user.photoURL||'';
+    document.getElementById('auth-name').textContent=user.displayName||user.email;
+    document.getElementById('auth-no-match').style.display=member?'none':'';
+  } else {
+    loginBtn.style.display='';
+    userEl.classList.remove('show');
+  }
+}
+
+if(FIREBASE_CONFIG.apiKey){
+  firebase.initializeApp(FIREBASE_CONFIG);
+  auth=firebase.auth();
+  auth.onAuthStateChanged(user=>{
+    currentUser=user;
+    currentMember=user?MEMBERS.find(m=>m.email&&m.email===user.email)||null:null;
+    updateAuthUI(currentUser,currentMember);
+    buildSelects();
+  });
+}
+document.getElementById('auth-login-btn').addEventListener('click',signInWithGoogle);
+document.getElementById('auth-logout').addEventListener('click',signOutUser);
 
 // ─────────────────────────────────────────────
 // RENDER
