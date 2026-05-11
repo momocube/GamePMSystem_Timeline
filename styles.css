@@ -503,6 +503,17 @@ textarea.nmod-edit:focus{border-color:#9b9a97;outline:none;}
 .notify-item-text{font-size:10px;color:var(--text-mid);margin-top:2px;}
 .notify-item-branch{font-size:9px;color:var(--text-dim);font-family:'DM Mono',monospace;margin-top:2px;}
 
+/* ── SEARCH ── */
+.search-overlay{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:500;display:flex;align-items:center;gap:6px;background:var(--surface);border:1.5px solid var(--accent);border-radius:10px;padding:6px 10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);}
+.search-input{border:none;outline:none;font-size:14px;background:transparent;width:220px;color:var(--text);font-family:'Noto Sans TC',sans-serif;}
+.search-count{font-size:12px;color:var(--text2);min-width:48px;text-align:center;}
+.search-nav{background:none;border:1px solid var(--border);border-radius:4px;cursor:pointer;padding:2px 7px;font-size:12px;color:var(--text);transition:background .1s;}
+.search-nav:hover{background:var(--surface2);}
+.search-close{background:none;border:none;cursor:pointer;font-size:14px;color:var(--text2);order:-1;padding:0 2px;}
+.nwrap.search-match .ncard{box-shadow:0 0 0 2.5px var(--accent),0 2px 8px rgba(100,146,197,0.4);}
+.nwrap.search-current .ncard{box-shadow:0 0 0 3px var(--accent),0 0 14px 4px rgba(100,146,197,0.55);transform:scale(1.05);transition:box-shadow 0.2s,transform 0.2s;}
+.nwrap.search-dim{opacity:0.3;}
+
 /* ── PRINT STYLES ── */
 @media print{
   body{overflow:visible!important;height:auto!important;}

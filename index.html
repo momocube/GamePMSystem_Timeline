@@ -300,5 +300,12 @@
   const db = firebase.firestore();
 </script>
 <script src="app.js"></script>
+<div id="search-overlay" class="search-overlay" style="display:none;">
+  <button id="search-close" class="search-close">✕</button>
+  <input id="search-input" class="search-input" type="text" placeholder="搜尋留言…" autocomplete="off">
+  <span id="search-count" class="search-count"></span>
+  <button id="search-prev" class="search-nav">↑</button>
+  <button id="search-next" class="search-nav">↓</button>
+</div>
 </body>
 </html>

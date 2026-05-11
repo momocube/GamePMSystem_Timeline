@@ -1530,6 +1530,7 @@ function buildTimeline(){
   applyF();
   syncScrollHeights();
   setTimeout(syncScrollHeights,300);
+  if(_searchActive) applySearchHighlights();
 }
 
 function drawVinePaths(bgEl,trunk){
@@ -3387,6 +3388,30 @@ async function clearFirestore(){
 }
 
 // ─────────────────────────────────────────────
+// SEARCH STATE (module-level so buildTimeline can access)
+// ─────────────────────────────────────────────
+let _searchResults=[];
+let _searchIdx=-1;
+let _searchActive=false;
+function applySearchHighlights(){
+  document.querySelectorAll('.nwrap').forEach(el=>{
+    el.classList.remove('search-match','search-current','search-dim');
+  });
+  if(!_searchResults.length) return;
+  const matchIds=new Set(_searchResults.map(n=>String(n.id)));
+  document.querySelectorAll('.nwrap').forEach(el=>{
+    el.classList.add(matchIds.has(el.dataset.id)?'search-match':'search-dim');
+  });
+  if(_searchIdx>=0&&_searchIdx<_searchResults.length){
+    const cur=_searchResults[_searchIdx];
+    document.querySelectorAll(`.nwrap[data-id="${cur.id}"]`).forEach(el=>{
+      el.classList.remove('search-match');
+      el.classList.add('search-current');
+    });
+  }
+}
+
+// ─────────────────────────────────────────────
 // USE_LOCAL: set to true to skip Firestore, use in-code test data
 // ─────────────────────────────────────────────
 const USE_LOCAL = false;
@@ -3429,4 +3454,84 @@ const USE_LOCAL = false;
     const nodeId = isNaN(params.get('node')) ? params.get('node') : Number(params.get('node'));
     setTimeout(() => openNodeModal(nodeId), 300);
   }
+
+  // ── Search ──
+  function openSearch(){
+    _searchActive=true;
+    const ov=document.getElementById('search-overlay');
+    ov.style.display='flex';
+    document.getElementById('search-input').value='';
+    document.getElementById('search-count').textContent='';
+    _searchResults=[];_searchIdx=-1;
+    document.getElementById('search-input').focus();
+  }
+
+  function closeSearch(){
+    _searchActive=false;
+    document.getElementById('search-overlay').style.display='none';
+    document.querySelectorAll('.nwrap.search-match,.nwrap.search-current,.nwrap.search-dim')
+      .forEach(el=>el.classList.remove('search-match','search-current','search-dim'));
+    _searchResults=[];_searchIdx=-1;
+  }
+
+  function updateSearchCount(){
+    const el=document.getElementById('search-count');
+    el.textContent=_searchResults.length?`${_searchIdx+1} / ${_searchResults.length}`:'無結果';
+  }
+
+  function scrollToSearchResult(){
+    if(_searchIdx<0||_searchIdx>=_searchResults.length) return;
+    applySearchHighlights();
+    updateSearchCount();
+    scrollToNode(_searchResults[_searchIdx].id);
+  }
+
+  function runSearch(q){
+    const query=q.trim().toLowerCase();
+    if(!query){closeSearch();openSearch();return;}
+    _searchResults=NODES.filter(n=>
+      (n.msg||'').toLowerCase().includes(query)||
+      (n.notes||'').toLowerCase().includes(query)
+    );
+    _searchIdx=_searchResults.length?0:-1;
+    updateSearchCount();
+    applySearchHighlights();
+    if(_searchIdx===0) scrollToSearchResult();
+  }
+
+  document.getElementById('search-input').addEventListener('input',e=>runSearch(e.target.value));
+  document.getElementById('search-next').addEventListener('click',()=>{
+    if(!_searchResults.length) return;
+    _searchIdx=(_searchIdx+1)%_searchResults.length;
+    scrollToSearchResult();
+  });
+  document.getElementById('search-prev').addEventListener('click',()=>{
+    if(!_searchResults.length) return;
+    _searchIdx=(_searchIdx-1+_searchResults.length)%_searchResults.length;
+    scrollToSearchResult();
+  });
+  document.getElementById('search-close').addEventListener('click',closeSearch);
+
+  document.addEventListener('keydown',e=>{
+    if((e.ctrlKey||e.metaKey)&&e.key==='f'){
+      e.preventDefault();
+      if(_searchActive) document.getElementById('search-input').focus();
+      else openSearch();
+      return;
+    }
+    if(e.key==='Escape'&&_searchActive){closeSearch();return;}
+    if(!_searchActive) return;
+    if(e.key==='Enter'||e.key==='ArrowDown'){
+      e.preventDefault();
+      if(!_searchResults.length) return;
+      _searchIdx=(_searchIdx+1)%_searchResults.length;
+      scrollToSearchResult();
+    }
+    if(e.key==='ArrowUp'){
+      e.preventDefault();
+      if(!_searchResults.length) return;
+      _searchIdx=(_searchIdx-1+_searchResults.length)%_searchResults.length;
+      scrollToSearchResult();
+    }
+  });
 })();
