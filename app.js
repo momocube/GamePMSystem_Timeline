@@ -1627,7 +1627,7 @@ function addCard(n,brow){
   if (n.replies && n.replies.length > 0) {
     replyBadgeHTML = `<div style="font-size:8px;color:var(--text-dim);margin-top:3px;">💬 ${n.replies.length}</div>`;
   }
-  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;">${brName}</div><div class="ncwho" style="color:${tc.accent}">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div>${imgH}${collabH}${linkH}${replyBadgeHTML}`;
+  card.innerHTML=`<div style="font-size:8px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:2px;">${brName}</div><div style="font-size:10px;font-weight:600;color:var(--text);line-height:1.35;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;margin-bottom:2px;">${displayMsg}</div><div class="ncwho" style="color:${tc.accent};font-size:8px;">${rtObj.label} <span class="ncdate">${fmt(n.date)}</span></div>${imgH}${collabH}${linkH}${replyBadgeHTML}`;
   w.append(avDot,card);
   w._nodeClick=()=>openNodeModal(n.id);
   w.addEventListener('click',e=>{if(w._nodeClick)w._nodeClick(e);});
