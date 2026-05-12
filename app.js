@@ -3612,3 +3612,8 @@ const USE_LOCAL = false;
     }
   });
 })();
+
+// ─────────────────────────────────────────────
+// AUTO RELOAD ON RECONNECT
+// ─────────────────────────────────────────────
+window.addEventListener('online',()=>location.reload());
