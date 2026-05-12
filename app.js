@@ -1499,6 +1499,7 @@ function buildTimeline(){
       const bStatus=b.status||'todo';
       const bStatusObj=statusObj(bStatus);
       const displayColor=bStatusObj.color;
+      brow.dataset.color=displayColor;
       const bIsFaded=bStatus==='done'||bStatus==='hold';
       if(bIsFaded){brow.style.opacity='0.5';brow.style.filter='saturate(0.3)';}
       // stem
@@ -1857,8 +1858,17 @@ function layoutBranchCards(brow,cardTop){
     });
   } else {
     // Branch rows: fixed 2-lane stagger (odd=top, even=bottom)
+    const barBottom=28; // .bbar top:20 + height:8
+    const branchColor=brow.dataset.color||'#aaa';
     visible.forEach((card,i)=>{
-      card.style.top=(top+(i%2)*CARD_LANE_H)+'px';
+      const cardTop=top+(i%2)*CARD_LANE_H;
+      card.style.top=cardTop+'px';
+      const lineH=cardTop-barBottom;
+      let conn=card.querySelector('.card-connector');
+      if(!conn){conn=document.createElement('div');conn.className='card-connector';card.appendChild(conn);}
+      conn.style.height=lineH+'px';
+      conn.style.top=(-lineH)+'px';
+      conn.style.background=branchColor;
     });
   }
 }

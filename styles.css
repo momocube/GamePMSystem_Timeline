@@ -89,6 +89,7 @@ header{height:48px;padding:0 16px;display:flex;align-items:center;gap:10px;borde
 .bmark-dot{width:7px;height:7px;border-radius:50%;border:2px solid var(--surface);margin-bottom:2px;}
 .bmark-date{font-family:'DM Mono',monospace;font-size:8px;color:var(--text-dim);background:var(--surface2);padding:1px 3px;border-radius:3px;border:1px solid var(--border);white-space:nowrap;}
 .endlbl{position:absolute;top:8px;font-size:8px;font-family:'DM Mono',monospace;color:var(--text-dim);white-space:nowrap;}
+.card-connector{position:absolute;width:2px;left:50%;margin-left:-1px;border-radius:1px;opacity:0.5;pointer-events:none;z-index:0;}
 /* .no-end-lbl removed — no longer used */
 
 /* ── NODE CARD ── */
