@@ -8,6 +8,7 @@ let END   = new Date(TODAY);
 START.setMonth(START.getMonth()-2); // default: 2 months before today
 END.setMonth(END.getMonth()+4);     // default: 4 months after today
 
+let _timeRangeInit=false;
 function recalcTimeRange(){
   const allDates=[];
   TRUNKS.forEach(t=>{
@@ -20,20 +21,19 @@ function recalcTimeRange(){
   });
   NODES.forEach(n=>{if(n.date)allDates.push(new Date(n.date));});
   allDates.push(TODAY);
-  if(allDates.length){
-    let min=new Date(Math.min(...allDates));
-    let max=new Date(Math.max(...allDates));
-    // Padding: 1 month before, 2 months after
-    min=new Date(min);min.setDate(1);min.setMonth(min.getMonth()-1);
-    max=new Date(max);max.setMonth(max.getMonth()+2);
-    // Limit: no more than 18 months total to keep timeline manageable
-    const maxDays=Math.round((max-min)/86400000);
-    if(maxDays>548){
-      // Center on today, show 9 months before and 9 months after
-      min=new Date(TODAY);min.setMonth(min.getMonth()-9);min.setDate(1);
-      max=new Date(TODAY);max.setMonth(max.getMonth()+9);
-    }
-    START=min; END=max;
+  if(!allDates.length)return;
+  let min=new Date(Math.min(...allDates));
+  let max=new Date(Math.max(...allDates));
+  min=new Date(min);min.setDate(1);min.setMonth(min.getMonth()-1);
+  max=new Date(max);max.setMonth(max.getMonth()+2);
+  if(!_timeRangeInit){
+    // First load: set range from scratch
+    START=min;END=max;
+    _timeRangeInit=true;
+  } else {
+    // Subsequent calls: only expand, never shift existing columns
+    if(min<START)START=min;
+    if(max>END)END=max;
   }
 }
 const BASE_DP = 110;
