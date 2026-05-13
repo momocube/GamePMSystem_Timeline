@@ -534,6 +534,7 @@ document.getElementById('btn-today').addEventListener('click',()=>{
 // ─────────────────────────────────────────────
 // RULER (with holidays + all dates)
 // ─────────────────────────────────────────────
+const DOW_LABELS=['日','一','二','三','四','五','六'];
 function buildRuler(){
   const el=document.getElementById('ruler');el.innerHTML='';
   const days=Math.ceil((END-START)/86400000+32);
@@ -548,8 +549,9 @@ function buildRuler(){
       const lbl=document.createElement('div');lbl.className='rc-holiday-label';lbl.textContent=TW_HOLIDAYS[ds];
       c.appendChild(lbl);
     }
-    if(d.getDate()===1){c.classList.add('ms');c.insertAdjacentHTML('beforeend',`${d.getMonth()+1}月`);}
-    else c.insertAdjacentHTML('beforeend',`${d.getDate()}`);
+    const dowSpan=`<div class="rc-dow">${DOW_LABELS[d.getDay()]}</div>`;
+    if(d.getDate()===1){c.classList.add('ms');c.insertAdjacentHTML('beforeend',`${dowSpan}<div>${d.getMonth()+1}月</div>`);}
+    else c.insertAdjacentHTML('beforeend',`${dowSpan}<div>${d.getDate()}</div>`);
     el.appendChild(c);
   }
   // Build day-column background strips
@@ -2922,6 +2924,8 @@ document.getElementById('subbt').addEventListener('click',()=>{
   NODES.push(nn);saveNode(nn);pendImgs=[];pendLinks=[];renderPendPrev();renderPendLinks();
   if(!exp[tid]){exp[tid]=true;}
   buildLabels();buildTimeline();
+  const _sa=document.getElementById('sa');
+  _sa.scrollLeft=dx(todayStr)-_sa.clientWidth*.35;
   if(document.getElementById('rp-title'))document.getElementById('rp-title').value='';
   document.getElementById('rmsg').value='';
   document.getElementById('rp-link-url').value='';document.getElementById('rp-link-name').value='';
