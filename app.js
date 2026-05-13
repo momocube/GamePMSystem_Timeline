@@ -524,6 +524,7 @@ document.getElementById('scale-sel').addEventListener('change',function(){
   buildRuler();buildTimeline();
   sa.scrollLeft=oldCenter*DP-sa.clientWidth*0.35;
   alignTodayLine();
+  savePrefs();
 });
 
 document.getElementById('btn-today').addEventListener('click',()=>{
@@ -586,7 +587,7 @@ function buildHeaderAvatars(){
     av.addEventListener('click',()=>{
       if(activeMems.has(m.id)){activeMems.delete(m.id);}
       else{activeMems.add(m.id);}
-      buildHeaderAvatars();applyF();
+      buildHeaderAvatars();applyF();savePrefs();
     });
     row.appendChild(av);
   });
@@ -1922,7 +1923,7 @@ function applyF(){
 const _typeFSel=document.getElementById('type-filter-sel');
 if(_typeFSel)_typeFSel.addEventListener('change',function(){activeType=this.value;applyF();});
 const _ownerFSel=document.getElementById('owner-filter-sel');
-if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;this.classList.toggle('filter-active',activeOwner!=='all');buildLabels();buildTimeline();});
+if(_ownerFSel)_ownerFSel.addEventListener('change',function(){activeOwner=this.value;this.classList.toggle('filter-active',activeOwner!=='all');buildLabels();buildTimeline();savePrefs();});
 
 // ─────────────────────────────────────────────
 // NOTIFICATION BELL & MENTIONS
@@ -3427,6 +3428,7 @@ function alignTodayLine(){
   }
 }
 function render(){
+  loadPrefs();
   document.documentElement.style.setProperty('--DAY',DP+'px');
   recalcTimeRange();
   document.getElementById('canvas').style.width=tw()+'px';
@@ -3617,6 +3619,42 @@ const USE_LOCAL = false;
     }
   });
 })();
+
+// ─────────────────────────────────────────────
+// PREFERENCES (localStorage persistence)
+// ─────────────────────────────────────────────
+const PREF_KEY='pmtool_prefs';
+function savePrefs(){
+  try{
+    localStorage.setItem(PREF_KEY,JSON.stringify({
+      scale:document.getElementById('scale-sel')?.value||'50',
+      ownerFilter:activeOwner,
+      activeMems:[...activeMems],
+      activeType
+    }));
+  }catch(e){}
+}
+function loadPrefs(){
+  try{
+    const saved=JSON.parse(localStorage.getItem(PREF_KEY)||'null');
+    if(!saved)return;
+    // Scale
+    if(saved.scale){
+      const sel=document.getElementById('scale-sel');
+      if(sel&&[...sel.options].some(o=>o.value===saved.scale)){
+        sel.value=saved.scale;
+        DP=Math.round(BASE_DP*parseInt(saved.scale)/100);
+        document.documentElement.style.setProperty('--DAY',DP+'px');
+      }
+    }
+    // Owner filter
+    if(saved.ownerFilter)activeOwner=saved.ownerFilter;
+    // Active members
+    if(Array.isArray(saved.activeMems))activeMems=new Set(saved.activeMems);
+    // Active type
+    if(saved.activeType)activeType=saved.activeType;
+  }catch(e){}
+}
 
 // ─────────────────────────────────────────────
 // AUTO RELOAD ON RECONNECT
