@@ -7,7 +7,7 @@
   --notion-red:#fce4e4;--notion-blue:#e3f2fd;--notion-green:#e8f5e9;
   --notion-orange:#fff3e0;--notion-purple:#f3e5f5;--notion-pink:#fce4ec;
   --shadow:rgba(0,0,0,.08);--shadow2:rgba(0,0,0,.16);
-  --DAY:110px;--trunk-h:28px;--branch-h:48px;--lcol-w:170px;
+  --DAY:55px;--trunk-h:28px;--branch-h:48px;--lcol-w:170px;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;font-size:15px;font-weight:500;}

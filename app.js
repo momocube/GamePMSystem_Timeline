@@ -37,7 +37,7 @@ function recalcTimeRange(){
   }
 }
 const BASE_DP = 110;
-let DP = 110;
+let DP = 55; // default 50%
 
 let MEMBERS = [
   {id:'M',name:'Momo',color:'#1976d2'},
@@ -3427,6 +3427,7 @@ function alignTodayLine(){
   }
 }
 function render(){
+  document.documentElement.style.setProperty('--DAY',DP+'px');
   recalcTimeRange();
   document.getElementById('canvas').style.width=tw()+'px';
   buildRuler();buildHeaderAvatars();buildOwnerFilter();buildLabels();buildTimeline();buildSelects();buildDailySelects();renderDailyEntries();updateHeaderRange();
