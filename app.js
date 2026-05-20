@@ -2907,6 +2907,20 @@ document.getElementById('subbt').addEventListener('click',()=>{
   const title=(document.getElementById('rp-title')?.value||'').trim();
   const desc=document.getElementById('rmsg').value.trim();
 
+  // Branch must be selected — otherwise the report would lose its anchor and vanish
+  if(!bid||!trunkForBranch(bid)){
+    const el=document.getElementById('rpbr');
+    el.style.borderColor='#c97b7b';el.style.background='#fbe9e9';el.style.boxShadow='0 0 0 2px #c97b7b55';
+    const sb=document.getElementById('subbt');const prevSbBg=sb.style.background,prevSbText=sb.textContent;
+    sb.style.background='#c97b7b';sb.textContent='⚠';
+    el.focus();
+    setTimeout(()=>{
+      el.style.borderColor='';el.style.background='';el.style.boxShadow='';
+      sb.style.background=prevSbBg||'var(--text)';sb.textContent=prevSbText||'↑';
+    },1600);
+    return;
+  }
+
   // If link name filled but no URL, warn and don't submit
   const _rpLinkName=document.getElementById('rp-link-name').value.trim();
   const _rpLinkUrl=document.getElementById('rp-link-url').value.trim();
