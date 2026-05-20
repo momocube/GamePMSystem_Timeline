@@ -326,7 +326,11 @@
 
   function reSync(target) {
     if (!target || target === 'all') {
-      return Promise.all(Object.keys(BUILDERS).map(_push));
+      // 序列推送，避免 Apps Script LockService 一窩蜂排隊超時
+      return Object.keys(BUILDERS).reduce(
+        (p, key) => p.then(() => _push(key)),
+        Promise.resolve()
+      );
     }
     return _push(target);
   }

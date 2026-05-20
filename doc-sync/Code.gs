@@ -105,6 +105,13 @@ function _replaceSection(body, headingText, blocks) {
   if (startIdx === -1) throw new Error('heading not found: '+headingText+'（請先執行 initDoc 建立骨架，或檢查 Doc 內 heading 文字是否完全一致）');
   if (endIdx === -1) endIdx = body.getNumChildren();
 
+  // 若這是文件最後一個章節，預先在文件結尾加一個空段落，
+  // 否則刪到最後一個段落時 Google Docs 會丟「不得移除最後一個段落」錯誤
+  if (endIdx === body.getNumChildren()) {
+    body.appendParagraph('');
+    // endIdx 維持原值；新增的空段落落在 endIdx 之後，不會被本次刪除迴圈動到
+  }
+
   // 刪除 startIdx+1 ~ endIdx-1
   for (let i = endIdx - 1; i > startIdx; i--) {
     body.removeChild(body.getChild(i));
