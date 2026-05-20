@@ -17,6 +17,7 @@
 
 (function(){
   'use strict';
+  console.log('[DocSync] sync.js loaded, script start');
 
   // ════════════════════════════════════════════════════════════════════
   // 設定
@@ -26,35 +27,54 @@
   const SYNC_TOKEN      = 'game_sync_888';
   const DEBOUNCE_MS     = 5000;
 
+  // 跨 <script> 取得全域變數（app.js 用 let/const 宣告，不在 window 上）
+  // 用 eval 在全域 lexical scope 找名稱，找不到回傳 undefined
+  function $g(name) {
+    try { return (0, eval)(name); } catch (e) { return undefined; }
+  }
+  const G = {
+    get db()                { return $g('db'); },
+    get MEMBERS()           { return $g('MEMBERS') || []; },
+    get TRUNKS()            { return $g('TRUNKS') || []; },
+    get NODES()             { return $g('NODES') || []; },
+    get DAILY_REPORTS()     { return $g('DAILY_REPORTS') || []; },
+    get MENTIONS()          { return $g('MENTIONS') || []; },
+    get CATS()              { return $g('CATS') || []; },
+    get REPORT_TYPES()      { return $g('REPORT_TYPES') || []; },
+    get PROJECT_STATUSES()  { return $g('PROJECT_STATUSES') || []; },
+    get PRIORITIES()        { return $g('PRIORITIES') || []; },
+    get deriveTrunkStatus() { return $g('deriveTrunkStatus'); }
+  };
+
   // ════════════════════════════════════════════════════════════════════
   // Lookup helpers（從 app.js 全域抓資料）
   // ════════════════════════════════════════════════════════════════════
 
   function memName(id) {
-    const m = (window.MEMBERS || []).find(x => x.id === id);
+    const m = (G.MEMBERS || []).find(x => x.id === id);
     return m ? m.name : (id || '?');
   }
   function memNames(ids) {
     return (ids || []).map(memName).join(', ');
   }
   function statusLabel(id) {
-    const s = (window.PROJECT_STATUSES || []).find(x => x.id === id);
+    const s = (G.PROJECT_STATUSES || []).find(x => x.id === id);
     return s ? s.label : (id || '');
   }
   function priorityLabel(id) {
-    const p = (window.PRIORITIES || []).find(x => x.id === id);
+    const p = (G.PRIORITIES || []).find(x => x.id === id);
     return p ? p.label : (id || '');
   }
   function reportTypeLabel(id) {
-    const r = (window.REPORT_TYPES || []).find(x => x.id === id);
+    const r = (G.REPORT_TYPES || []).find(x => x.id === id);
     return r ? r.label : (id || '');
   }
   function catLabel(id) {
-    const c = (window.CATS || []).find(x => x.id === id);
+    const c = (G.CATS || []).find(x => x.id === id);
     return c ? c.label : (id || '');
   }
   function findBranch(branchId) {
-    for (const t of (window.TRUNKS || [])) {
+    for (const t of (G.TRUNKS || [])) {
       const b = (t.branches || []).find(x => x.id === branchId);
       if (b) return { trunk:t, branch:b };
     }
@@ -74,12 +94,12 @@
   // ════════════════════════════════════════════════════════════════════
 
   function buildTrunksBlocks() {
-    const trunks = window.TRUNKS || [];
+    const trunks = G.TRUNKS || [];
     const blocks = [];
     blocks.push({ type:'p', text:'共 ' + trunks.length + ' 個主幹專案（含已封存）。', italic:true });
 
     trunks.forEach(t => {
-      const status   = statusLabel((window.deriveTrunkStatus ? window.deriveTrunkStatus(t).id : t.status) || 'todo');
+      const status   = statusLabel((G.deriveTrunkStatus ? G.deriveTrunkStatus(t).id : t.status) || 'todo');
       const priority = priorityLabel(t.priority || 'normal');
       const owners   = memNames(t.owners && t.owners.length ? t.owners : (t.owner ? [t.owner] : []));
       const collabs  = memNames(t.collaborators || []);
@@ -113,8 +133,8 @@
   }
 
   function buildNodesBlocks() {
-    const nodes = window.NODES || [];
-    const trunks = window.TRUNKS || [];
+    const nodes = G.NODES || [];
+    const trunks = G.TRUNKS || [];
 
     // group by trunk → branch
     const grouped = {}; // trunkId -> branchId -> nodes[]
@@ -160,7 +180,7 @@
   }
 
   function buildDailyReportsBlocks() {
-    const list = (window.DAILY_REPORTS || []).slice();
+    const list = (G.DAILY_REPORTS || []).slice();
     list.sort((a,b) => (b.date||'').localeCompare(a.date||''));
 
     // group by date
@@ -188,7 +208,7 @@
   }
 
   function buildMentionsBlocks() {
-    const list = (window.MENTIONS || []).slice();
+    const list = (G.MENTIONS || []).slice();
     list.sort((a,b) => (b.at||'').localeCompare(a.at||''));
 
     const blocks = [];
@@ -207,7 +227,7 @@
   }
 
   function buildMembersBlocks() {
-    const list = window.MEMBERS || [];
+    const list = G.MEMBERS || [];
     const blocks = [];
     blocks.push({ type:'p', text:'共 ' + list.length + ' 位成員（含已停用）。', italic:true });
     blocks.push({ type:'table',
@@ -229,25 +249,25 @@
     blocks.push({ type:'h2', text:'專案狀態 (PROJECT_STATUSES)' });
     blocks.push({ type:'table',
       headers:['ID','標籤','文字色','底色'],
-      rows: (window.PROJECT_STATUSES||[]).map(s => [s.id, s.label, s.color, s.bg])
+      rows: (G.PROJECT_STATUSES||[]).map(s => [s.id, s.label, s.color, s.bg])
     });
 
     blocks.push({ type:'h2', text:'優先度 (PRIORITIES)' });
     blocks.push({ type:'table',
       headers:['ID','標籤','文字色','底色'],
-      rows: (window.PRIORITIES||[]).map(p => [p.id, p.label, p.color, p.bg])
+      rows: (G.PRIORITIES||[]).map(p => [p.id, p.label, p.color, p.bg])
     });
 
     blocks.push({ type:'h2', text:'回報類型 (REPORT_TYPES)' });
     blocks.push({ type:'table',
       headers:['ID','標籤','文字色','底色'],
-      rows: (window.REPORT_TYPES||[]).map(r => [r.id, r.label, r.color, r.bg])
+      rows: (G.REPORT_TYPES||[]).map(r => [r.id, r.label, r.color, r.bg])
     });
 
     blocks.push({ type:'h2', text:'進度類別 (CATS)' });
     blocks.push({ type:'table',
       headers:['ID','標籤','文字色','底色'],
-      rows: (window.CATS||[]).map(c => [c.id, c.label, c.color, c.bg])
+      rows: (G.CATS||[]).map(c => [c.id, c.label, c.color, c.bg])
     });
     return blocks;
   }
@@ -316,8 +336,9 @@
   // ════════════════════════════════════════════════════════════════════
 
   function attach() {
-    const db = window.db;
+    const db = G.db;
     if (!db || !db.collection) {
+      console.log('[DocSync] waiting for Firestore...');
       setTimeout(attach, 1000);
       return;
     }
