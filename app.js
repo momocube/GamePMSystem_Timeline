@@ -2949,9 +2949,12 @@ document.getElementById('subbt').addEventListener('click',()=>{
   const nn={id:++NC,trunk:tid,branch:bid,type:rpType,date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
   NODES.push(nn);saveNode(nn);pendImgs=[];pendLinks=[];renderPendPrev();renderPendLinks();
   if(!exp[tid]){exp[tid]=true;}
-  buildLabels();buildTimeline();
+  // If report date exceeds current timeline end, extend the range automatically
+  const extended=new Date(dateStr)>END;
+  if(extended){recalcTimeRange();buildLabels();buildTimeline();updateHeaderRange();}
+  else{buildLabels();buildTimeline();}
   const _sa=document.getElementById('sa');
-  _sa.scrollLeft=dx(todayStr)-_sa.clientWidth*.35;
+  _sa.scrollLeft=dx(extended?dateStr:todayStr)-_sa.clientWidth*.35;
   if(document.getElementById('rp-title'))document.getElementById('rp-title').value='';
   document.getElementById('rmsg').value='';
   document.getElementById('rp-link-url').value='';document.getElementById('rp-link-name').value='';
