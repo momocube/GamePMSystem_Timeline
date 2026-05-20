@@ -628,10 +628,21 @@ function buildSelects(){
       const o=document.createElement('option');o.value=rt.id;o.textContent=rt.label;rtSel.appendChild(o);
     });
     if(prevType)rtSel.value=prevType;
+    if(!rtSel.dataset.bound){
+      rtSel.addEventListener('change',syncMsdrow);
+      rtSel.dataset.bound='1';
+    }
   }
   // Pre-fill date
   const msdate=document.getElementById('msdate');
   if(msdate&&!msdate.value)msdate.value=todayStr;
+  syncMsdrow();
+}
+function syncMsdrow(){
+  const rtSel=document.getElementById('rp-type');
+  const row=document.getElementById('msdrow');
+  if(!rtSel||!row)return;
+  row.classList.toggle('show',rtSel.value==='milestone');
 }
 function populateBranchSelect(){
   const br=document.getElementById('rpbr');br.innerHTML='';
@@ -2917,10 +2928,10 @@ document.getElementById('subbt').addEventListener('click',()=>{
   // Combine title + description into msg
   let msg=title?(desc?title+'\n\n'+desc:title):desc;
 
-  const dateStr=di||todayStr;
+  const rpType=(document.getElementById('rp-type')?.value)||'update';
+  const dateStr=(rpType==='milestone'?di:'')||todayStr;
   let tid=trunkForBranch(bid);
   const nodeLinks=[...pendLinks];
-  const rpType=(document.getElementById('rp-type')?.value)||'update';
   const nn={id:++NC,trunk:tid,branch:bid,type:rpType,date:dateStr,member:mk,collaborators:[],msg,notes:'',images:[...pendImgs],links:nodeLinks};
   NODES.push(nn);saveNode(nn);pendImgs=[];pendLinks=[];renderPendPrev();renderPendLinks();
   if(!exp[tid]){exp[tid]=true;}
