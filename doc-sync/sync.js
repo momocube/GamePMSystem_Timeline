@@ -287,6 +287,8 @@
 
   const _timers = {};
   const status = {}; // collection -> { lastAt, lastOk, lastError }
+  let _queue = Promise.resolve(); // 全域序列化佇列：所有 _push 排隊執行
+  const _pending = new Set();     // 已排入佇列但尚未跑的 collection（去重用）
 
   function _push(collection) {
     const builder = BUILDERS[collection];
@@ -321,7 +323,15 @@
 
   function schedule(collection) {
     if (_timers[collection]) clearTimeout(_timers[collection]);
-    _timers[collection] = setTimeout(() => { _push(collection); }, DEBOUNCE_MS);
+    _timers[collection] = setTimeout(() => {
+      // 同一 collection 已在排隊就不重複加
+      if (_pending.has(collection)) return;
+      _pending.add(collection);
+      _queue = _queue.then(() => {
+        _pending.delete(collection);
+        return _push(collection);
+      });
+    }, DEBOUNCE_MS);
   }
 
   function reSync(target) {
