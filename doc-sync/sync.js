@@ -335,14 +335,12 @@
   }
 
   function reSync(target) {
-    if (!target || target === 'all') {
-      // 序列推送，避免 Apps Script LockService 一窩蜂排隊超時
-      return Object.keys(BUILDERS).reduce(
-        (p, key) => p.then(() => _push(key)),
-        Promise.resolve()
-      );
-    }
-    return _push(target);
+    const keys = (!target || target === 'all') ? Object.keys(BUILDERS) : [target];
+    // 全部排進全域 _queue，與 schedule() 共用同一條序列鏈
+    keys.forEach(k => {
+      _queue = _queue.then(() => _push(k));
+    });
+    return _queue;
   }
 
   // ════════════════════════════════════════════════════════════════════
