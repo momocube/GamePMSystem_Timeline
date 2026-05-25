@@ -388,6 +388,22 @@ function refreshDaily(){
   daily=DAILY_REPORTS_RAW.filter(r=>r.date===dateStr&&r.member===currentMemberId).map(r=>[r.done?'✓':'',r.branch?branchNameById(r.branch):'未指定',r.cat||'開發',r.text||'',r.id]);
   buildDaily();wireDailyItems();
 }
+function showDailyPicker(anchor,items,onPick){
+  document.querySelectorAll('.daily-picker').forEach(p=>p.remove());
+  const pop=document.createElement('div');pop.className='daily-picker';
+  pop.style.cssText='position:fixed;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 22px rgba(0,0,0,.18);padding:4px;z-index:9999;max-height:260px;overflow-y:auto;min-width:140px;font-family:inherit';
+  pop.innerHTML=items.map(it=>'<div class="dp-row" data-val="'+escHtml(it.val)+'" style="display:flex;align-items:center;gap:6px;padding:5px 8px;cursor:pointer;border-radius:5px;font-size:11px;font-weight:700;color:var(--text);white-space:nowrap"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:'+(it.color||'transparent')+';flex:none"></span><span>'+escHtml(it.label)+'</span></div>').join('');
+  document.body.appendChild(pop);
+  const r=anchor.getBoundingClientRect();
+  pop.style.left=r.left+'px';pop.style.top=(r.bottom+4)+'px';
+  const pw=pop.offsetWidth;if(r.left+pw>window.innerWidth-8)pop.style.left=(window.innerWidth-pw-8)+'px';
+  pop.querySelectorAll('.dp-row').forEach(row=>{
+    row.onmouseenter=()=>row.style.background='#eef3fb';
+    row.onmouseleave=()=>row.style.background='';
+    row.onclick=e=>{e.stopPropagation();onPick(row.dataset.val);pop.remove()};
+  });
+  setTimeout(()=>{const closeP=ev=>{if(!ev.target.closest('.daily-picker')){pop.remove();document.removeEventListener('click',closeP)}};document.addEventListener('click',closeP)},10);
+}
 function wireDailyItems(){
   const list=document.getElementById('dailyList');if(!list)return;
   Array.from(list.children).forEach((item,idx)=>{
@@ -400,6 +416,31 @@ function wireDailyItems(){
       try{await db.collection('dailyReports').doc(docId).update({done})}catch(_){toast('⚠ 更新失敗')}
       const r=DAILY_REPORTS_RAW.find(x=>x.id===docId);if(r)r.done=done;
       rebuildDailyWeekly();buildWeekly();
+    };
+    const bm=item.querySelector('.branch-mini');
+    if(bm)bm.onclick=e=>{
+      e.stopPropagation();
+      if(!docId)return;
+      const opts=[{val:'',label:'未指定',color:'#94a3b8'}];
+      trunks.forEach(t=>{if(t.archived)return;(t.branches||[]).forEach(b=>{if(b.archived)return;opts.push({val:b.id,label:t.name+' · '+b.name,color:b.color||'#4f86df'})})});
+      showDailyPicker(bm,opts,async val=>{
+        const r=DAILY_REPORTS_RAW.find(x=>x.id===docId);if(!r)return;
+        r.branch=val||'';
+        try{await db.collection('dailyReports').doc(docId).update({branch:r.branch})}catch(_){return toast('⚠ 更新失敗')}
+        refreshDaily();rebuildDailyWeekly();buildWeekly();
+      });
+    };
+    const cm=item.querySelector('.cat-mini');
+    if(cm)cm.onclick=e=>{
+      e.stopPropagation();
+      if(!docId)return;
+      const opts=CATS.map(c=>({val:c.label,label:c.label,color:c.color}));
+      showDailyPicker(cm,opts,async val=>{
+        const r=DAILY_REPORTS_RAW.find(x=>x.id===docId);if(!r)return;
+        r.cat=val;
+        try{await db.collection('dailyReports').doc(docId).update({cat:val})}catch(_){return toast('⚠ 更新失敗')}
+        refreshDaily();rebuildDailyWeekly();buildWeekly();
+      });
     };
     const rm=item.querySelector('.rm');
     if(rm)rm.onclick=async e=>{
