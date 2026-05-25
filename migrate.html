@@ -62,6 +62,19 @@
   <div id="recover-preview" style="margin-top:8px;"></div>
 </div>
 
+<div class="section" style="border:2px solid #67b879;background:#f0fff4;">
+  <h3 style="font-size:14px;margin-bottom:6px;color:#145a32;">🧪 匯出到 v8 測試版</h3>
+  <p style="font-size:11px;color:#9b9a97;margin-bottom:8px;">從新版 Firestore 抓取現有資料，轉成 <code>排版測試版-v8</code> 的 <code>v8_state_v1</code> localStorage 格式，方便評估真實資料量下的版面表現。不會動到 Firestore，也不會碰正式版。</p>
+  <button id="btn-export-v8" style="background:#67b879;color:#fff;font-size:13px;font-weight:600;">📥 抓取並轉成 v8 格式</button>
+  <div id="v8-output" style="display:none;margin-top:10px;">
+    <div id="v8-stats" style="font-size:11px;color:#145a32;font-weight:700;margin-bottom:6px;"></div>
+    <label style="margin-top:6px;">完整貼入指令（複製後到 v8 頁面按 F12 → Console 貼上執行）：</label>
+    <textarea id="v8-snippet" rows="3" readonly style="width:100%;font-family:monospace;font-size:11px;background:#f7f7f5;border:1px solid #d6d4d0;border-radius:4px;padding:6px;"></textarea>
+    <button id="btn-copy-snippet" style="background:#2eaadc;color:#fff;font-size:12px;margin-top:6px;">📋 複製指令</button>
+    <details style="margin-top:8px;"><summary style="font-size:11px;color:#6b6b6a;cursor:pointer;">查看轉換後的 JSON</summary><textarea id="v8-json" rows="12" readonly style="width:100%;font-family:monospace;font-size:10px;margin-top:6px;background:#f7f7f5;border:1px solid #d6d4d0;border-radius:4px;padding:6px;"></textarea></details>
+  </div>
+</div>
+
 <div class="section" id="member-cleanup-section" style="display:none;">
   <h3 style="font-size:14px;margin-bottom:10px;">🧹 成員清理</h3>
   <p style="font-size:11px;color:#9b9a97;margin-bottom:8px;">勾選要刪除的亂碼或重複成員（會同時清除舊版 + 新版）：</p>
@@ -913,6 +926,156 @@ document.getElementById('btn-nuke-both').addEventListener('click', async () => {
   await nukeNew();
   await nukeOld();
   buildMemberCleanup();
+});
+
+// ============ Export to v8 test page ============
+const V8_BASE_DATE = new Date('2024-03-28T00:00:00');
+const V8_LETTERS = ['M','K','L','R','T','A','B','C','D','E','F','G','H','J','N','P','Q','S','U','V','W','X','Y','Z'];
+const V8_STATUS_LABEL = {todo:'待處理',wip:'製作中',testing:'測試中',done:'已完成',hold:'擱置中'};
+const V8_STATUS_COLOR = {todo:'#94a3b8',wip:'#4f86df',testing:'#eba91e',done:'#3ec295',hold:'#a3a3a3'};
+const V8_TYPE_MARK = {milestone:'★',review:'◇',meeting:'◇'};
+
+function v8DayIdx(v){
+  if(v==null||v==='') return null;
+  let d;
+  if(v instanceof Date) d=v;
+  else if(typeof v==='object' && typeof v.toDate==='function') d=v.toDate();
+  else if(typeof v==='object' && typeof v.seconds==='number') d=new Date(v.seconds*1000);
+  else if(typeof v==='object' && typeof v._seconds==='number') d=new Date(v._seconds*1000);
+  else if(typeof v==='number') d=new Date(v>1e12?v:v*1000);
+  else if(typeof v==='string') d=new Date(v.length===10 ? v+'T00:00:00' : v);
+  else return null;
+  if(!d || isNaN(d.getTime())) return null;
+  return Math.round((d - V8_BASE_DATE) / 86400000);
+}
+function v8ShortDate(idx){
+  if(idx==null) return '';
+  const d = new Date(V8_BASE_DATE.getTime() + idx*86400000);
+  return (d.getMonth()+1) + '/' + String(d.getDate()).padStart(2,'0');
+}
+
+async function exportToV8(){
+  log('🧪 開始從新版 Firestore 抓取資料…', '');
+  const [trunkSnap, nodeSnap, memSnap] = await Promise.all([
+    newFS.collection('trunks').get(),
+    newFS.collection('nodes').get(),
+    newFS.collection('members').get(),
+  ]);
+  const prodTrunks = trunkSnap.docs.map(d=>d.data());
+  const prodNodes = nodeSnap.docs.map(d=>d.data());
+  const prodMembers = memSnap.docs.map(d=>d.data());
+  log(`  抓到 trunks:${prodTrunks.length} nodes:${prodNodes.length} members:${prodMembers.length}`);
+  const sampleBr = prodTrunks.find(t=>t.branches && t.branches.length)?.branches[0];
+  if(sampleBr) log(`  📐 樣本 branch: start=${JSON.stringify(sampleBr.start)} end=${JSON.stringify(sampleBr.end)} status=${sampleBr.status}`, '');
+
+  // Build member id → v8 letter map
+  const memMap = {};
+  const usedLetters = new Set();
+  prodMembers.forEach(m=>{
+    if(m.id && m.id.length===1 && /[A-Z]/.test(m.id) && !usedLetters.has(m.id)){
+      memMap[m.id] = m.id; usedLetters.add(m.id);
+    }
+  });
+  let letterCursor = 0;
+  prodMembers.forEach(m=>{
+    if(!memMap[m.id]){
+      while(letterCursor<V8_LETTERS.length && usedLetters.has(V8_LETTERS[letterCursor])) letterCursor++;
+      const ltr = V8_LETTERS[letterCursor] || 'X';
+      memMap[m.id] = ltr; usedLetters.add(ltr); letterCursor++;
+    }
+  });
+
+  const stats = {trunks:0, branches:0, events:0, archivedTrunks:0, archivedBranches:0, openBranches:0, closedBranches:0, badDates:0, orphanNodes:0, outOfRange:0};
+  const V8_MIN=-120, V8_MAX=779;
+  const v8Trunks = [];
+
+  prodTrunks.forEach(t=>{
+    if(t.archived){ stats.archivedTrunks++; return; }
+    const branches = (t.branches||[]).filter(b=>{
+      if(b.archived){ stats.archivedBranches++; return false; }
+      return true;
+    });
+    const v8Branches = branches.map(b=>{
+      const sIdx = v8DayIdx(b.start);
+      const eIdxRaw = v8DayIdx(b.end);
+      const open = (eIdxRaw==null || !b.end);
+      if(sIdx==null) stats.badDates++;
+      const start = sIdx ?? 0;
+      const end = open ? (start + 14) : eIdxRaw;
+      if(open) stats.openBranches++; else stats.closedBranches++;
+      if(start<V8_MIN||start>V8_MAX||(!open && (end<V8_MIN||end>V8_MAX))) stats.outOfRange++;
+
+      // Pick events for this branch
+      const branchNodes = prodNodes.filter(n=>n.trunk===t.id && n.branch===b.id && !n.archived);
+      const events = branchNodes.map(n=>{
+        const dIdx = v8DayIdx(n.date);
+        const mid = memMap[n.member] || 'M';
+        const msg = (n.msg||'').replace(/\s+/g,' ').trim().slice(0,14);
+        const mark = V8_TYPE_MARK[n.type] || '·';
+        return [dIdx ?? start, mid, msg, mark];
+      }).filter(e=>e[2]).sort((a,b)=>a[0]-b[0]);
+      stats.events += events.length;
+
+      const statusLabel = V8_STATUS_LABEL[b.status] || '製作中';
+      const color = V8_STATUS_COLOR[b.status] || '#4f86df';
+      const dateStr = v8ShortDate(start) + ' → ' + (open ? '進行中' : v8ShortDate(end));
+      const obj = {name: b.name||'(未命名)', status:statusLabel, color, dates:dateStr, start, end, events};
+      if(open) obj.open = true;
+      return obj;
+    });
+    if(v8Branches.length===0) return;
+    const v8t = {name: t.name||'(未命名主幹)', branches: v8Branches};
+    if(t.priority==='high' || t.priority==='highest') v8t.urgent = true;
+    v8Trunks.push(v8t);
+    stats.trunks++;
+    stats.branches += v8Branches.length;
+  });
+
+  stats.orphanNodes = prodNodes.filter(n=>!prodTrunks.find(t=>t.id===n.trunk)).length;
+  log(`✅ 轉換完成：${stats.trunks} 主幹 / ${stats.branches} 枝幹 / ${stats.events} 事件`, 'ok');
+  log(`  open(進行中)/closed = ${stats.openBranches}/${stats.closedBranches}`, stats.openBranches===stats.branches?'warn':'');
+  if(stats.archivedTrunks||stats.archivedBranches) log(`  已略過封存：${stats.archivedTrunks} 主幹 / ${stats.archivedBranches} 枝幹`, 'warn');
+  if(stats.outOfRange) log(`  ⚠️ 日期超出 v8 可視範圍（2023-11-29 ~ 2026-05-15）：${stats.outOfRange} 枝幹`, 'warn');
+  if(stats.badDates) log(`  起始日缺失（已填 0）：${stats.badDates}`, 'warn');
+  if(stats.orphanNodes) log(`  孤兒節點（主幹不存在）：${stats.orphanNodes}`, 'warn');
+  return {trunks: v8Trunks, stats};
+}
+
+document.getElementById('btn-export-v8').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-export-v8');
+  btn.disabled = true; btn.textContent = '抓取中…';
+  try{
+    const {trunks: v8Trunks, stats} = await exportToV8();
+    const json = JSON.stringify(v8Trunks);
+    const snippet = `localStorage.setItem('v8_state_v1', ${JSON.stringify(json)}); location.reload();`;
+    document.getElementById('v8-stats').innerHTML =
+      `📦 ${stats.trunks} 主幹 / ${stats.branches} 枝幹 / ${stats.events} 事件` +
+      ` · ⏳ open ${stats.openBranches} / closed ${stats.closedBranches}` +
+      (stats.outOfRange?` · ⚠️ 超出範圍 ${stats.outOfRange}`:'') +
+      (stats.archivedTrunks+stats.archivedBranches?` · 📦 略過 ${stats.archivedTrunks+stats.archivedBranches} 封存`:'') +
+      (stats.badDates?` · ⚠️ ${stats.badDates} 起始日缺失`:'');
+    document.getElementById('v8-snippet').value = snippet;
+    document.getElementById('v8-json').value = JSON.stringify(v8Trunks, null, 2);
+    document.getElementById('v8-output').style.display = 'block';
+  }catch(e){
+    log('❌ 匯出失敗：' + e.message, 'err');
+    console.error(e);
+  }finally{
+    btn.disabled = false; btn.textContent = '📥 抓取並轉成 v8 格式';
+  }
+});
+
+document.getElementById('btn-copy-snippet').addEventListener('click', async () => {
+  const ta = document.getElementById('v8-snippet');
+  try{
+    await navigator.clipboard.writeText(ta.value);
+    const btn = document.getElementById('btn-copy-snippet');
+    const orig = btn.textContent;
+    btn.textContent = '✓ 已複製';
+    setTimeout(()=>{ btn.textContent = orig; }, 1500);
+  }catch(e){
+    ta.select(); document.execCommand('copy');
+  }
 });
 
 init();
