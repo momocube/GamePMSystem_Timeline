@@ -386,9 +386,12 @@ function branchNameById(bid){for(const t of trunks){const b=(t.branches||[]).fin
 function refreshDaily(){
   const dDate=document.getElementById('dailyDate');
   const dateStr=dDate?dDate.value:'';
-  if(!dateStr||!currentMemberId){daily=[];buildDaily();return}
+  const list=document.getElementById('dailyList');
+  const preserved=list?Array.from(list.querySelectorAll('.daily-item')).filter(r=>r.querySelector('.daily-note-edit')&&!r.dataset.id):[];
+  if(!dateStr||!currentMemberId){daily=[];buildDaily();preserved.forEach(r=>list&&list.appendChild(r));return}
   daily=DAILY_REPORTS_RAW.filter(r=>r.date===dateStr&&r.member===currentMemberId).map(r=>[r.done?'✓':'',r.branch?branchNameById(r.branch):'未指定',r.cat||'開發',r.text||'',r.id]);
   buildDaily();wireDailyItems();
+  preserved.forEach(r=>list&&list.appendChild(r));
 }
 function showDailyPicker(anchor,items,onPick){
   document.querySelectorAll('.daily-picker').forEach(p=>p.remove());
@@ -530,6 +533,9 @@ function wireDailyItems(){
     const inp=row.querySelector('.daily-note-edit');
     const brSelN=row.querySelector('.daily-branch-sel');
     const catSelN=row.querySelector('.daily-cat-sel');
+    const cbN=row.querySelector('.checkbox');
+    let newDone=false;
+    if(cbN)cbN.onclick=e=>{e.stopPropagation();newDone=!newDone;row.classList.toggle('done',newDone);cbN.textContent=newDone?'✓':''};
     brSelN.onchange=()=>{const bC=branchColorById(brSelN.value);brSelN.style.borderLeft=bC?'3px solid '+bC:''};
     catSelN.onchange=()=>{const c=CATS.find(x=>x.label===catSelN.value)||CATS[0]||{color:'#4f86df'};catSelN.style.background=c.color+'22';catSelN.style.color=c.color};
     let committed=false;
@@ -538,9 +544,10 @@ function wireDailyItems(){
       if(committed)return;committed=true;
       const txt=inp.value.trim();
       if(!txt){row.remove();return}
-      const newDr={member:currentMemberId,date:dateStr,text:txt,cat:catSelN.value||defCat,done:false,branch:brSelN.value||''};
+      const newDr={member:currentMemberId,date:dateStr,text:txt,cat:catSelN.value||defCat,done:newDone,branch:brSelN.value||''};
       try{
         const docRef=await db.collection('dailyReports').add(newDr);
+        row.remove();
         DAILY_REPORTS_RAW.push({id:docRef.id,...newDr});
         refreshDaily();rebuildDailyWeekly();buildWeekly();
       }catch(e){console.error(e);toast('⚠ 新增失敗：'+e.message);row.remove()}
