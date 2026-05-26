@@ -551,10 +551,12 @@ function wireDailyItems(){
         row.remove();
         DAILY_REPORTS_RAW.push({id:docRef.id,...newDr});
         refreshDaily();rebuildDailyWeekly();buildWeekly();
+        if(viaEnter&&addLine)setTimeout(()=>addLine.click(),60);
       }catch(e){console.error(e);toast('⚠ 新增失敗：'+e.message);committed=false}
     };
+    let viaEnter=false;
     inp.onblur=()=>setTimeout(()=>{if(document.activeElement&&row.contains(document.activeElement))return;commit()},120);
-    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}else if(e.key==='Escape'){committed=true;row.remove()}};
+    inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();viaEnter=true;inp.blur()}else if(e.key==='Escape'){committed=true;row.remove()}};
     row.querySelector('.rm').onclick=e=>{e.stopPropagation();committed=true;row.remove()};
   };
   const dDate=document.getElementById('dailyDate');
