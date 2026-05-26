@@ -573,7 +573,6 @@ function wireDailyItems(){
       const titleEl=document.getElementById('rpTitle');if(titleEl){titleEl.value=r.text||'';titleEl.focus()}
       const bSel=document.getElementById('rpBranchSel');
       if(bSel&&r.branch){let tid='';for(const t of trunks){if((t.branches||[]).some(b=>b.id===r.branch)){tid=t.id;break}}if(tid)bSel.value=tid+'|'+r.branch}
-      const tSel=document.getElementById('reportType');if(tSel){tSel.value='進度回報';if(typeof window.updateMilestoneRow==='function')window.updateMilestoneRow()}
       pendingDailyDoneId=docId;
       toast('已帶入回報，送出後將自動完成此項');
     };
@@ -691,7 +690,6 @@ function wireDailyItems(){
         const titleEl=document.getElementById('rpTitle');if(titleEl){titleEl.value=text||'';titleEl.focus()}
         const bSel=document.getElementById('rpBranchSel');
         if(bSel&&branch){let tid='';for(const t of trunks){if((t.branches||[]).some(b=>b.id===branch)){tid=t.id;break}}if(tid)bSel.value=tid+'|'+branch}
-        const tSel=document.getElementById('reportType');if(tSel){tSel.value='進度回報';if(typeof window.updateMilestoneRow==='function')window.updateMilestoneRow()}
         pendingDailyDoneId=docId||'';
         toast(docId?'已帶入回報，送出後將自動完成此項':'已開啟回報，請輸入內容');
       };
