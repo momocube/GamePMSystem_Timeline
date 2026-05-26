@@ -296,11 +296,40 @@ function normalizeStatus(s){if(!s)return '製作中';const k=String(s).toLowerCa
 window.member=function(id){return members.find(x=>x[0]===id)||members[0]||['?','—','#888']};
 function populateReportSelects(){
   const bSel=document.getElementById('rpBranchSel'),mSel=document.getElementById('rpMemberSel'),tSel=document.getElementById('reportType'),dmSel=document.getElementById('dailyMemberSel'),dDate=document.getElementById('dailyDate');
-  if(bSel){const opts=[];trunks.forEach(t=>{if(t.archived)return;(t.branches||[]).forEach(b=>{if(b.archived)return;opts.push('<option value="'+t.id+'|'+b.id+'">'+escHtml(t.name)+' · '+escHtml(b.name)+'</option>')})});bSel.innerHTML='<option value="">選擇枝幹…</option>'+opts.join('')}
+  if(bSel){
+    const all=[];trunks.forEach(t=>{if(t.archived)return;(t.branches||[]).forEach(b=>{if(b.archived)return;all.push({val:t.id+'|'+b.id,label:t.name+' · '+b.name})})});
+    const recent=getRecent('reportRecentBranch');
+    const recSet=new Set(recent);
+    const recItems=recent.map(v=>all.find(x=>x.val===v)).filter(Boolean);
+    const restItems=all.filter(x=>!recSet.has(x.val));
+    const def=recItems[0]?recItems[0].val:'';
+    let html='<option value="">選擇枝幹…</option>';
+    if(recItems.length){
+      html+='<optgroup label="最近使用">'+recItems.map(x=>'<option value="'+x.val+'"'+(x.val===def?' selected':'')+'>'+escHtml(x.label)+'</option>').join('')+'</optgroup>';
+      html+='<optgroup label="全部">'+restItems.map(x=>'<option value="'+x.val+'">'+escHtml(x.label)+'</option>').join('')+'</optgroup>';
+    }else{
+      html+=all.map(x=>'<option value="'+x.val+'">'+escHtml(x.label)+'</option>').join('');
+    }
+    bSel.innerHTML=html;
+  }
   const memOpts=members.filter(m=>memberActive[m[0]]!==false).map(m=>'<option value="'+m[0]+'"'+(m[0]===currentMemberId?' selected':'')+'>'+escHtml(m[1])+'</option>').join('');
   if(mSel)mSel.innerHTML=memOpts;
   if(dmSel)dmSel.innerHTML=memOpts;
-  if(tSel)tSel.innerHTML=REPORT_TYPES.map(r=>'<option value="'+escHtml(r.label)+'">'+escHtml(r.label)+'</option>').join('');
+  if(tSel){
+    const recentT=getRecent('reportRecentType');
+    const recSetT=new Set(recentT);
+    const recItemsT=recentT.map(l=>REPORT_TYPES.find(r=>r.label===l)).filter(Boolean);
+    const restItemsT=REPORT_TYPES.filter(r=>!recSetT.has(r.label));
+    const defT=recItemsT[0]?recItemsT[0].label:'';
+    let h='';
+    if(recItemsT.length){
+      h+='<optgroup label="最近">'+recItemsT.map(r=>'<option value="'+escHtml(r.label)+'"'+(r.label===defT?' selected':'')+'>'+escHtml(r.label)+'</option>').join('')+'</optgroup>';
+      h+='<optgroup label="全部">'+restItemsT.map(r=>'<option value="'+escHtml(r.label)+'">'+escHtml(r.label)+'</option>').join('')+'</optgroup>';
+    }else{
+      h=REPORT_TYPES.map(r=>'<option value="'+escHtml(r.label)+'">'+escHtml(r.label)+'</option>').join('');
+    }
+    tSel.innerHTML=h;
+  }
   if(dDate&&!dDate.value){const t=new Date();dDate.value=t.getFullYear()+'-'+String(t.getMonth()+1).padStart(2,'0')+'-'+String(t.getDate()).padStart(2,'0')}
 }
 function updateLivePill(){
@@ -536,7 +565,9 @@ function wireDailyItems(){
     try{
       const docRef=await db.collection('nodes').add(newNode);
       NODES_RAW.push({id:docRef.id,...newNode});
-      attachNodesToBranches();buildTimeline();
+      pushRecent('reportRecentBranch',tid+'|'+bid);
+      pushRecent('reportRecentType',typeLabel);
+      attachNodesToBranches();buildTimeline();populateReportSelects();
       document.getElementById('rpTitle').value='';
       document.getElementById('rpDesc').value='';
       pendImgs=[];pendLinks=[];refreshAttachState();
