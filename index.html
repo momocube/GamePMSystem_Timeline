@@ -541,16 +541,17 @@ function wireDailyItems(){
     let committed=false;
     inp.focus();
     const commit=async()=>{
-      if(committed)return;committed=true;
+      if(committed)return;
       const txt=inp.value.trim();
-      if(!txt){row.remove();return}
+      if(!txt)return;
+      committed=true;
       const newDr={member:currentMemberId,date:dateStr,text:txt,cat:catSelN.value||defCat,done:newDone,branch:brSelN.value||''};
       try{
         const docRef=await db.collection('dailyReports').add(newDr);
         row.remove();
         DAILY_REPORTS_RAW.push({id:docRef.id,...newDr});
         refreshDaily();rebuildDailyWeekly();buildWeekly();
-      }catch(e){console.error(e);toast('⚠ 新增失敗：'+e.message);row.remove()}
+      }catch(e){console.error(e);toast('⚠ 新增失敗：'+e.message);committed=false}
     };
     inp.onblur=()=>setTimeout(()=>{if(document.activeElement&&row.contains(document.activeElement))return;commit()},120);
     inp.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();inp.blur()}else if(e.key==='Escape'){committed=true;row.remove()}};
