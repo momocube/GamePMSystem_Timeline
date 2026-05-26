@@ -579,6 +579,8 @@ function wireDailyItems(){
       pendImgs=[];pendLinks=[];refreshAttachState();
       const _br=branchNameById(bid);handleMentions(msg,_br,docRef.id);
       toast('✓ 已新增留言');
+      const _tlTab=document.querySelector('.view-tab[data-view="timeline"]');if(_tlTab&&!document.getElementById('timeline').classList.contains('active'))_tlTab.click();
+      setTimeout(()=>{const r=findEventByNodeId(docRef.id);if(!r)return;const[_ti,_bi,_ei]=r;if(typeof showBubbleDetail==='function')showBubbleDetail(_ti,_bi,_ei);requestAnimationFrame(()=>{const pin=document.querySelector('.pin[data-ti="'+_ti+'"][data-bi="'+_bi+'"][data-ei="'+_ei+'"]');if(!pin)return;const bub=pin.querySelector('.bubble');if(bub)bub.classList.add('selected');const ts=document.querySelector('.timeline-scroll');if(ts){const left=parseFloat(pin.style.left)||0;ts.scrollTo({left:left-ts.clientWidth/2,behavior:'smooth'})}})},250);
     }catch(e){console.error(e);toast('⚠ 送出失敗：'+e.message)}
   };
   const addLine=document.querySelector('.add-line');
