@@ -80,6 +80,12 @@
 .dash-thead,.dash-trow{display:grid;grid-template-columns:18px minmax(160px,1.5fr) 96px 80px 92px minmax(180px,1.4fr) 56px minmax(160px,1.2fr);align-items:center;font-size:12px;gap:10px}
 .dash-thead{height:42px;background:#fbfcfd;border-bottom:1.5px solid var(--line);color:var(--muted);font-weight:900;padding:0 18px;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
 .dash-trow{min-height:54px;border-bottom:1px solid var(--line2);padding:9px 18px;transition:background .12s}
+.dash-todo-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:0 18px 9px 46px;border-bottom:1px solid var(--line2);background:#fff}
+.dash-todo-row .dash-todo-label{font:700 10px 'DM Mono';letter-spacing:.05em;color:var(--muted)}
+.dash-todo-chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:700;color:var(--text);background:#f6f8fb;border:1px solid var(--line);border-radius:999px;padding:2px 10px 2px 6px;cursor:pointer}
+.dash-todo-chip .dash-todo-cb{width:14px;height:14px;border-radius:5px;border:1.5px solid #c9d1dd;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:9px;flex-shrink:0}
+.dash-todo-chip.done{opacity:.5;text-decoration:line-through}
+.dash-todo-chip.done .dash-todo-cb{background:var(--blue);border-color:var(--blue)}
 .dash-trow>div{min-width:0;overflow:hidden}
 .dash-trow.trunk{background:linear-gradient(180deg,#f6f9fd 0%,#f1f5fb 100%);border-bottom:1.5px solid var(--line)}
 .dash-trow.trunk.urgent{background:linear-gradient(180deg,#fff3f3 0%,#ffe9e9 100%)}
@@ -257,12 +263,14 @@ filtered.forEach(({t,ti})=>{
       const bBarHtml=timeBar(b.start,b.end,b.open,b.color);
       const bDates=`<div class="dash-time-label"><span>${formatDateShort(b.start)}</span>${b.open?'<span class="live">進行中</span>':`<span>${formatDateShort(b.end)}</span>`}</div>`;
       rows+=`<div class="dash-trow branch" data-ti="${ti}" data-bi="${realBi}"><div></div><div class="dash-name-cell"><span class="dash-branch-icon" style="color:${b.color}">└</span><span class="dash-name">${b.name}</span></div><div><span class="dash-pill" style="background:${so.color}1a;border-color:${so.color};color:${so.color}"><i style="background:${so.color}"></i>${b.status}</span></div><div><span style="color:var(--muted);font-size:10px;font-weight:700">—</span></div><div class="dash-owners">${ownerAvatarsHtml(b.owners||[])||'<span style="color:var(--muted);font-size:11px">—</span>'}</div><div class="dash-time">${bBarHtml}${bDates}</div><div class="dash-msg-cell ${(b.events||[]).length?'':'zero'}">${(b.events||[]).length}<i>則</i></div><div>${dashShowArchived?`<button class="dash-restore-btn" data-restore="${ti},${realBi}">📤 還原</button>`:`<div class="dash-note-display" title="${(note||'').replace(/"/g,'&quot;')}">${note||''}</div>`}</div></div>`;
+      if((b.todos||[]).length){rows+=`<div class="dash-todo-row" data-ti="${ti}" data-bi="${realBi}"><span class="dash-todo-label">代辦</span>${b.todos.map((td,i)=>`<span class="dash-todo-chip${td.done?' done':''}" data-i="${i}"><span class="dash-todo-cb">${td.done?'✓':''}</span>${escHtml(td.text)}</span>`).join('')}</div>`;}
     });
   }
 });
 body.innerHTML=summary+'<div class="dash-table">'+rows+'</div>';
 body.querySelectorAll('.dash-trow.trunk').forEach(r=>{const car=r.querySelector('.dash-caret');car.onclick=e=>{e.stopPropagation();const ti=+r.dataset.ti;window.dashExp[ti]=window.dashExp[ti]===false;buildDashboard()};r.querySelector('.dash-name-cell').onclick=e=>{if(e.target.closest('input')||e.target.closest('button'))return;car.click()}});
 body.querySelectorAll('.dash-note-input').forEach(inp=>{inp.onchange=()=>{snap();trunks[+inp.dataset.ti].statusNote=inp.value;saveState()};inp.onclick=e=>e.stopPropagation()});
+body.querySelectorAll('.dash-todo-chip').forEach(chip=>{chip.onclick=e=>{e.stopPropagation();const row=chip.closest('.dash-todo-row');if(!row)return;const ti=+row.dataset.ti,bi=+row.dataset.bi,i=+chip.dataset.i;const b=trunks[ti]&&trunks[ti].branches[bi];const td=b&&(b.todos||[])[i];if(!td)return;snap();td.done=!td.done;saveState();buildDashboard()}});
 body.querySelectorAll('[data-restore]').forEach(btn=>{btn.onclick=e=>{e.stopPropagation();const [ti,bi]=btn.dataset.restore.split(',').map(Number);snap();trunks[ti].branches[bi].archived=false;saveState();buildDashboard();buildTimeline()}});
 body.querySelectorAll('[data-restore-trunk]').forEach(btn=>{btn.onclick=e=>{e.stopPropagation();const ti=+btn.dataset.restoreTrunk;snap();trunks[ti].archived=false;(trunks[ti].branches||[]).forEach(b=>b.archived=false);saveState();buildDashboard();buildTimeline()}})}function applyDensity(){if(!calHead)return;calHead.classList.remove('cal-tight','cal-compact','cal-medium');if(DAY<16)calHead.classList.add('cal-tight');else if(DAY<24)calHead.classList.add('cal-compact');else if(DAY<36)calHead.classList.add('cal-medium')}
 function buildCalendar(){calHead.innerHTML=days.map(d=>`<div class="day ${d[2]&&d[2]!=='today'?'holiday':''} ${d[2]==='today'?'today':''} ${d[1].includes('月')?'month':''} ${d[0]==='一'?'weekstart':''}">${d[2]&&d[2]!=='today'?`<div class="holiday-label">${d[2]}</div>`:''}<div class="dow">${d[0]}</div><div class="num">${d[1]}</div></div>`).join('');applyDensity()}
