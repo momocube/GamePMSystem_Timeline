@@ -397,7 +397,7 @@ async function loadAllFromFirestore(){
     try{const pr=await db.collection('settings').doc('priorities').get();if(pr.exists){const it=pr.data().items;if(Array.isArray(it)&&it.length)PRIORITIES=it}}catch(_){}
     try{const rt=await db.collection('settings').doc('reportTypes').get();if(rt.exists){const it=rt.data().items;if(Array.isArray(it)&&it.length)REPORT_TYPES=it}}catch(_){}
     try{const dc=await db.collection('settings').doc('discordChannels').get();if(dc.exists){const it=dc.data().items;if(Array.isArray(it)&&it.length)DISCORD_CHANNELS=it}}catch(_){}
-    REPORT_TYPES=REPORT_TYPES.filter(r=>r.id!=='meeting'&&r.label!=='會議').map(r=>r.label==='里程碑'?{...r,label:'特殊活動'}:r);
+    REPORT_TYPES=REPORT_TYPES.filter(r=>r.id!=='meeting'&&r.label!=='會議').map(r=>(r.id==='milestone'||r.label==='里程碑')?{...r,label:'特殊活動'}:r);
     try{
       const dr=await db.collection('dailyReports').get();
       DAILY_REPORTS_RAW=migrateDailyDocs(dr.docs.map(d=>({id:d.id,...d.data()})));
