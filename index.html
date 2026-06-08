@@ -262,7 +262,7 @@ filtered.forEach(({t,ti})=>{
     allBranches.forEach(b=>{
       const realBi=(t.branches||[]).indexOf(b);
       const so=statusObj(b.status);
-      const lastEv=(b.events||[]).slice(-1)[0];
+      const lastEv=(b.events||[]).slice().sort((a,b)=>(a[0]||0)-(b[0]||0)).slice(-1)[0];
       const note=lastEv?lastEv[2]:'';
       const bBarHtml=timeBar(b.start,b.end,b.open,b.color);
       const bDates=`<div class="dash-time-label"><span>${formatDateShort(b.start)}</span>${b.open?'<span class="live">進行中</span>':`<span>${formatDateShort(b.end)}</span>`}</div>`;
