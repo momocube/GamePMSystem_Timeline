@@ -768,22 +768,19 @@ function wireDailyItems(){
     const rbN=row.querySelector('.daily-report-btn');
     if(rbN)rbN.onclick=async e=>{
       e.stopPropagation();
-      const openDrawer=(docId,text,branch)=>{
-        const drawer=document.querySelector('.report-drawer');if(drawer)drawer.classList.remove('collapsed');
-        const titleEl=document.getElementById('rpTitle');if(titleEl)titleEl.value=text||'';
-        const descEl=document.getElementById('rpDesc');
-        const _focusOn=(rbN&&rbN.dataset&&rbN.dataset.focusOn)||'title';
-        if(rbN&&rbN.dataset)rbN.dataset.focusOn='';
-        if(_focusOn==='desc'&&descEl)descEl.focus();else if(titleEl)titleEl.focus();
-        const bSel=document.getElementById('rpBranchSel');
-        if(bSel&&branch){let tid='';for(const t of trunks){if((t.branches||[]).some(b=>b.id===branch)){tid=t.id;break}}if(tid)bSel.value=tid+'|'+branch}
-        pendingDailyDoneId=docId||'';
-        toast(docId?(_focusOn==='desc'?'已送回報，請補上內容':'已帶入回報，送出後將自動完成此項'):'已開啟回報，請輸入內容');
-      };
+      const _focusOn=(rbN&&rbN.dataset&&rbN.dataset.focusOn)||'title';
+      if(rbN&&rbN.dataset)rbN.dataset.focusOn='';
       const txt=inp.value.trim();
+      const branch=brSelN.value||'';
+      const drawer=document.querySelector('.report-drawer');if(drawer)drawer.classList.remove('collapsed');
+      const titleEl=document.getElementById('rpTitle');if(titleEl)titleEl.value=txt||'';
+      const descEl=document.getElementById('rpDesc');
+      const bSel=document.getElementById('rpBranchSel');
+      if(bSel&&branch){let tid='';for(const t of trunks){if((t.branches||[]).some(b=>b.id===branch)){tid=t.id;break}}if(tid)bSel.value=tid+'|'+branch}
+      if(_focusOn==='desc'&&descEl)descEl.focus();else if(titleEl)titleEl.focus();
       if(txt&&!committed){
         committed=true;
-        const newDr={member:currentMemberId,date:dateStr,text:txt,cat:catSelN.value||defCat,done:newDone,branch:brSelN.value||''};
+        const newDr={member:currentMemberId,date:dateStr,text:txt,cat:catSelN.value||defCat,done:newDone,branch};
         try{
           const docRef=await db.collection('dailyReports').add(newDr);
           row.remove();
@@ -792,10 +789,12 @@ function wireDailyItems(){
           if(newDr.cat)pushRecent('dailyRecentCat',newDr.cat);
           refreshDaily();rebuildDailyWeekly();buildWeekly();
           pushDailyUndo({docId:docRef.id,payload:{...newDr}});
-          openDrawer(docRef.id,newDr.text,newDr.branch);
-        }catch(err){console.error(err);toast('⚠ 新增失敗：'+err.message);committed=false}
+          pendingDailyDoneId=docRef.id;
+          toast(_focusOn==='desc'?'已送回報，請補上內容':'已帶入回報，送出後將自動完成此項');
+        }catch(err){console.error(err);toast('⚠ 新增失敗：'+err.message);committed=false;pendingDailyDoneId=''}
       }else{
-        openDrawer('',txt,brSelN.value||'');
+        pendingDailyDoneId='';
+        toast('已開啟回報，請輸入內容');
       }
     };
   };
