@@ -74,14 +74,8 @@
 .dash-urgent-num{font:900 38px 'DM Mono';line-height:1;color:#cf6f74}
 .dash-urgent-num.zero{color:var(--muted)}
 .dash-urgent-meta{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--mid);font-weight:800;min-width:0}
-.dash-urgent-list{display:flex;flex-direction:column;gap:4px;margin-top:4px;font-size:11px;color:#9d2a2a;font-weight:800;max-height:180px;overflow-y:auto;padding-right:4px}
-.dash-urgent-list .urg-trunk{display:flex;flex-direction:column;gap:1px}
-.dash-urgent-list .urg-trunk-name{display:flex;align-items:center;gap:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#9d2a2a;font-weight:900}
-.dash-urgent-list .urg-trunk-count{margin-left:auto;background:#ffe0e0;color:#9d2a2a;border-radius:999px;padding:0 6px;font:800 9px 'DM Mono';flex-shrink:0}
-.dash-urgent-list .urg-branch{display:flex;align-items:center;gap:5px;padding:1px 0 1px 12px;color:var(--mid);font-weight:700;font-size:10.5px;min-width:0}
-.dash-urgent-list .urg-branch i{display:inline-block;width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.dash-urgent-list .urg-branch span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.dash-urgent-list .urg-branch em{font-style:normal;font:700 9px 'DM Mono';color:var(--muted);flex-shrink:0;letter-spacing:.02em}
+.dash-urgent-list{display:flex;flex-direction:column;gap:2px;margin-top:2px;font-size:11px;color:#9d2a2a;font-weight:800;max-height:180px;overflow-y:auto;padding-right:4px}
+.dash-urgent-list div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .dash-table{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:var(--soft)}
 .dash-thead,.dash-trow{display:grid;grid-template-columns:18px minmax(160px,1.5fr) 96px 80px 92px minmax(180px,1.4fr) 56px minmax(160px,1.2fr);align-items:center;font-size:12px;gap:10px}
 .dash-thead{height:42px;background:#fbfcfd;border-bottom:1.5px solid var(--line);color:var(--muted);font-weight:900;padding:0 18px;font-size:10px;letter-spacing:.12em;text-transform:uppercase}
@@ -247,9 +241,8 @@ const overviewCard=`<div class="dash-card"><div class="dash-card-title">總覽</
 const statusBarSegs=PROJECT_STATUSES.map(s=>statusCounts[s.label]>0?`<div class="dash-statusbar-seg" style="flex:${statusCounts[s.label]};background:${s.color}"></div>`:'').join('');
 const statusLegend=PROJECT_STATUSES.map(s=>statusCounts[s.label]>0?`<div class="dash-status-leg"><i style="background:${s.color}"></i>${s.label}<b>${statusCounts[s.label]}</b></div>`:'').join('');
 const statusCard=`<div class="dash-card"><div class="dash-card-title">進度分布</div><div class="dash-statusbar">${statusBarSegs||'<div class="dash-statusbar-seg" style="flex:1;background:#eef1f5"></div>'}</div><div class="dash-status-legend">${statusLegend||'<div class="dash-status-leg" style="color:var(--muted)">尚無資料</div>'}</div></div>`;
-const urgentBranches=urgentTrunks.reduce((acc,{t})=>acc+((t.branches||[]).filter(b=>!b.archived).length),0);
-const urgentList=urgentTrunks.map(({t})=>{const bs=(t.branches||[]).filter(b=>!b.archived);const bItems=bs.map(b=>`<div class="urg-branch" title="${escHtml(b.name)} · ${escHtml(b.status||'')}"><i style="background:${b.color||'#94a3b8'}"></i><span>${escHtml(b.name)}</span><em>${escHtml(b.status||'')}</em></div>`).join('');return `<div class="urg-trunk"><div class="urg-trunk-name">● ${escHtml(t.name)}<span class="urg-trunk-count">${bs.length}</span></div>${bItems}</div>`}).join('');
-const urgentCard=`<div class="dash-card"><div class="dash-card-title">緊急項目</div><div class="dash-urgent"><div class="dash-urgent-num ${urgentTrunks.length?'':'zero'}">${urgentTrunks.length}</div><div class="dash-urgent-meta"><div>${urgentTrunks.length?`需優先關注 · 共 ${urgentBranches} 條枝幹`:'無緊急項目'}</div><div class="dash-urgent-list">${urgentList}</div></div></div></div>`;
+const urgentList=urgentTrunks.map(({t})=>`<div>● ${escHtml(t.name)}</div>`).join('');
+const urgentCard=`<div class="dash-card"><div class="dash-card-title">緊急項目</div><div class="dash-urgent"><div class="dash-urgent-num ${urgentTrunks.length?'':'zero'}">${urgentTrunks.length}</div><div class="dash-urgent-meta"><div>${urgentTrunks.length?'需優先關注':'無緊急項目'}</div><div class="dash-urgent-list">${urgentList}</div></div></div></div>`;
 const summary=`<div class="dash-summary">${overviewCard}${statusCard}${urgentCard}</div>`;
 let rows=`<div class="dash-thead"><div></div><div>專案名稱</div><div>狀態</div><div>優先度</div><div>負責人</div><div>時程</div><div>留言</div><div>專案狀況</div></div>`;
 if(!window.dashExp)window.dashExp={};
