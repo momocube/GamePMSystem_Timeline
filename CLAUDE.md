@@ -10,9 +10,7 @@
 - **外部整合**：Discord Webhook（標註推送通知）
 
 ## 檔案結構
-- `index.html` — 主頁面 HTML
-- `app.js` — 所有邏輯（資料、UI、Firestore 同步、通知、拖曳等）
-- `styles.css` — 所有樣式
+- `index.html` — 主頁面、樣式與所有邏輯（資料、UI、Firestore 同步、通知、拖曳等）
 - `migrate.html` — 從舊版系統遷移資料的工具
 
 ## 資料結構
@@ -48,7 +46,7 @@
 
 ### @標註與通知
 - Discord Webhook 自動推送（FormData 格式避免 CORS）
-- Webhook URL：見 app.js 中 DISCORD_WEBHOOK 常數
+- Webhook URL：見 index.html 中 DISCORD_WEBHOOK 常數
 - 右上角 🔔 通知鈴鐺，顯示今日未讀標註數
 - 通知面板列出今日標註，已讀變暗淡
 - 點擊通知跳到對應留言（URL ?node=xxx 參數）
@@ -56,7 +54,13 @@
 ### 專案總表
 - 表格檢視所有主幹/枝幹狀態
 - 主幹有可編輯的「專案狀況」欄位（寶藍色）
-- 枝幹顯示最新留言
+- 主幹與枝幹都有淺紅底的「該專案遇到的問題」欄位，填寫問題後可選擇對接的老闆，離開欄位時自動儲存
+- 問題獨立儲存為 `problemNote`，老闆成員 ID 儲存為 `problemOwnerId`，並記錄 `problemUpdatedAt`（毫秒時間戳）與 `problemUpdatedBy`（成員 ID），供後續 AI 週報使用；目前尚未串接 AI 或排程
+- 對接老闆選單目前使用所有在職成員；成員資料尚無獨立的主管角色欄位
+- 舊資料的問題欄位預設空白，代表尚未填寫，不能推論為沒有問題
+- 枝幹的專案狀況欄保留待辦項目，總表不再顯示最新留言摘要；完整留言仍保留在時間軸
+- 即時同步重繪時保留正在編輯的內容與游標位置
+- 封存項目可唯讀查看已填寫的問題
 - 匯出 Excel / 列印 PDF
 - 「📦 已封存」按鈕切換查看/還原封存項目
 
