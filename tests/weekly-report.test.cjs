@@ -36,10 +36,12 @@ test('periods handle cross-year and leap-day dates', () => {
   assert.equal(leap[1].end, '2028-02-29');
 });
 
-test('all members remain separate, including same names, inactive members and missing profiles', () => {
+test('daily content includes exactly the five active members and excludes all other profiles', () => {
   const members = [
-    {id: 'a', name: '同名'}, {id: 'b', name: '同名'},
-    {id: 'c', name: '無回報'}, {id: 'd', name: '離職', active: false}
+    {id: 'a', name: '同名', active: true}, {id: 'b', name: '同名', active: true},
+    {id: 'c', name: '無回報'}, {id: 'd', name: '離職', active: false},
+    {id: 'e', name: '成員四', active: true}, {id: 'f', name: '成員五', active: true},
+    {id: 'g', name: '已停用主管', active: false}
   ];
   const reports = [
     {id: '1', member: 'a', date: '2026-11-04', cat: '設計', text: '左界線 | 保留符號\n第二行', done: false},
@@ -48,28 +50,38 @@ test('all members remain separate, including same names, inactive members and mi
     {id: '4', member: 'missing-profile', date: '2026-11-12', text: '未知成員紀錄'},
     {id: '5', member: 'a', date: '2026-11-17', cat: '設計', text: '右界線'},
     {id: '6', member: 'a', date: '2026-11-03', text: '太早不應出現'},
-    {id: '7', member: 'a', date: '2026-11-18', text: '太晚不應出現'}
+    {id: '7', member: 'a', date: '2026-11-18', text: '太晚不應出現'},
+    {id: '8', member: 'e', date: '2026-11-12', cat: '請假', text: '當日請假原文'},
+    {id: '9', member: 'g', date: '2026-11-12', text: '停用主管紀錄'},
+    {id: '10', date: '2026-11-12', text: '未指定成員紀錄'}
   ];
   const result = api.buildText({members, reports, now});
   assert.equal(result.filename, '全員週報_2026-11-04_2026-11-17.txt');
   assert.equal(result.mime, 'text/plain;charset=utf-8');
   assert.equal(result.content.charCodeAt(0), 0xFEFF);
   assert.equal(result.content.replace(/\r\n/g, '').includes('\n'), false);
-  assert.equal((result.content.match(/【同名】/g) || []).length, 4);
-  assert.equal((result.content.match(/【無回報】/g) || []).length, 2);
-  assert.equal((result.content.match(/【離職（已停用）】/g) || []).length, 2);
-  assert.match(result.content, /全員合計：5 人；2 筆工作；0 筆請假/);
-  assert.match(result.content, /全員合計：5 人；2 筆工作；1 筆請假/);
+  assert.equal((result.content.match(/^\uFEFF?2026-\d{2}-\d{2}（.）$/gm) || []).length, 14);
+  assert.equal((result.content.match(/^【.*】$/gm) || []).length, 70);
+  assert.equal((result.content.match(/【同名】/g) || []).length, 28);
+  assert.equal((result.content.match(/【無回報】/g) || []).length, 14);
+  assert.equal((result.content.match(/【成員四】/g) || []).length, 14);
+  assert.equal((result.content.match(/【成員五】/g) || []).length, 14);
   assert.match(result.content, /左界線 \| 保留符號\r\n    第二行/);
-  assert.match(result.content, /2026-11-17（二）（尚未到期，預填紀錄）/);
-  assert.match(result.content, /本週（未結算）/);
-  assert.match(result.content, /未知成員紀錄/);
-  assert.doesNotMatch(result.content, /太早不應出現|太晚不應出現|missing-profile|請假 1 筆/);
-  assert.equal(reports.length, 7);
-  assert.equal(members.length, 4);
+  assert.match(result.content, /2026-11-17（二）/);
+  assert.match(result.content, /當日請假原文/);
+  assert.doesNotMatch(result.content, /太早不應出現|太晚不應出現|missing-profile|未知成員紀錄|未指定成員紀錄|離職|停用主管|休假/);
+  assert.doesNotMatch(result.content, /匯出時間|週期：|範圍：|合計|工作類型|筆工作|筆請假|未結算|預填紀錄|\[設計\]|\[文件\]|\[請假\]/);
+  const firstDay = result.content.split('2026-11-05（四）')[0];
+  assert.match(firstDay, /左界線/);
+  assert.doesNotMatch(firstDay, /不同人的回報|當日請假原文|右界線/);
+  const secondWeek = result.content.split('2026-11-11（三）')[1];
+  assert.match(secondWeek, /當日請假原文/);
+  assert.doesNotMatch(secondWeek, /左界線|不同人的回報/);
+  assert.equal(reports.length, 10);
+  assert.equal(members.length, 7);
 });
 
-test('legacy nested reports retain every entry and normalize category names', () => {
+test('legacy nested reports retain every original entry without category labels or statistics', () => {
   const migration = html.slice(html.indexOf('function migrateDailyDocs('), html.indexOf('function _isMigId('));
   const context = vm.createContext({});
   vm.runInContext(migration, context);
@@ -77,14 +89,14 @@ test('legacy nested reports retain every entry and normalize category names', ()
     {note: '舊資料文件', cat: 'doc', done: false}, {note: '舊資料請假', cat: 'leave', done: false}
   ]}]);
   const result = api.buildText({members: [{id: 'a', name: '成員'}], reports, now});
-  assert.match(result.content, /1 筆工作；1 筆請假/);
-  assert.match(result.content, /\[文件\] 舊資料文件/);
-  assert.match(result.content, /\[請假\] 舊資料請假/);
+  assert.match(result.content, /  - 舊資料文件/);
+  assert.match(result.content, /  - 舊資料請假/);
+  assert.doesNotMatch(result.content, /\[文件\]|\[請假\]|合計|工作類型/);
 });
 
 test('successful empty reads produce explicit no-data output', () => {
-  assert.equal((api.buildText({now}).content.match(/尚無成員與回報資料/g) || []).length, 2);
-  assert.equal((api.buildText({now, members: [{id: 'a', name: '成員'}]}).content.match(/本週無回報紀錄/g) || []).length, 2);
+  assert.equal((api.buildText({now}).content.match(/無成員工作紀錄/g) || []).length, 14);
+  assert.equal((api.buildText({now, members: [{id: 'a', name: '成員'}]}).content.match(/（無回報紀錄）/g) || []).length, 14);
 });
 
 function ui() {
