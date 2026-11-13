@@ -81,15 +81,42 @@ test('daily content includes exactly the five active members and excludes all ot
   assert.equal(members.length, 7);
 });
 
-test('legacy nested reports retain every original entry without category labels or statistics', () => {
+test('work entries include the linked project name without duplicating the parent or inventing missing links', () => {
+  const projects = [
+    {id: 'laser', name: '雷射槍', branches: [{id: 'stage4', name: '雷射槍(第四階段_上架前)', archived: true}]},
+    {id: 'historic', name: '歷史專案', archived: true, branches: [{id: 'old-stage', name: '歷史分支'}]},
+    {id: 'root-only', name: '主幹專案', branches: []}
+  ];
+  const reports = [
+    {id: '1', member: 'a', date: '2026-11-12', branch: 'stage4', text: '深度攝影機測試\n第二行工作內容'},
+    {id: '2', member: 'a', date: '2026-11-12', branch: 'old-stage', text: '歷史回報'},
+    {id: '3', member: 'a', date: '2026-11-12', scheduleRootId: 'root-only', text: '主幹工作'},
+    {id: '4', member: 'a', date: '2026-11-12', text: '無關聯工作'},
+    {id: '5', member: 'a', date: '2026-11-12', branch: 'deleted-project-id', text: '關聯已移除的工作'},
+    {id: '6', member: 'a', date: '2026-11-12', branchId: 'stage4', text: '舊欄位工作'},
+    {id: '7', member: 'a', date: '2026-11-12', branch: 'root-only', text: '主幹直接關聯'}
+  ];
+  const {content} = api.buildText({members: [{id: 'a', name: '成員'}], reports, projects, now});
+  assert.match(content, /  - 雷射槍\(第四階段_上架前\) - 深度攝影機測試\r\n    第二行工作內容/);
+  assert.match(content, /  - 歷史分支 - 歷史回報/);
+  assert.match(content, /  - 主幹專案 - 主幹工作/);
+  assert.match(content, /  - 無關聯工作\r\n/);
+  assert.match(content, /  - 關聯已移除的工作\r\n/);
+  assert.match(content, /  - 雷射槍\(第四階段_上架前\) - 舊欄位工作/);
+  assert.match(content, /  - 主幹專案 - 主幹直接關聯/);
+  assert.doesNotMatch(content, /雷射槍 - 雷射槍|deleted-project-id|未指定專案|工作類型|合計/);
+});
+
+test('legacy nested reports retain content and project links without category labels or statistics', () => {
   const migration = html.slice(html.indexOf('function migrateDailyDocs('), html.indexOf('function _isMigId('));
   const context = vm.createContext({});
   vm.runInContext(migration, context);
   const reports = context.migrateDailyDocs([{id: 'old', date: '2026-11-04', member: 'a', entries: [
-    {note: '舊資料文件', cat: 'doc', done: false}, {note: '舊資料請假', cat: 'leave', done: false}
+    {note: '舊資料文件', cat: 'doc', done: false, branchId: 'stage4'}, {note: '舊資料請假', cat: 'leave', done: false}
   ]}]);
-  const result = api.buildText({members: [{id: 'a', name: '成員'}], reports, now});
-  assert.match(result.content, /  - 舊資料文件/);
+  const projects = [{id: 'laser', name: '雷射槍', branches: [{id: 'stage4', name: '雷射槍(第四階段_上架前)'}]}];
+  const result = api.buildText({members: [{id: 'a', name: '成員'}], reports, projects, now});
+  assert.match(result.content, /  - 雷射槍\(第四階段_上架前\) - 舊資料文件/);
   assert.match(result.content, /  - 舊資料請假/);
   assert.doesNotMatch(result.content, /\[文件\]|\[請假\]|合計|工作類型/);
 });
@@ -151,12 +178,14 @@ test('signed-out, failed reads and changed sessions never download a partial rep
   assert.equal(view.downloads.length, 0);
 });
 
-test('HTML adapter requests both collections from the server and supports nested legacy entries', async () => {
+test('HTML adapter loads members, reports and project names from the server and rejects incomplete reads', async () => {
   const calls = [];
   let app;
+  let failCollection = '';
   const docs = {
     members: [{id: 'm', data: () => ({name: '測試成員'})}],
-    dailyReports: [{id: 'legacy', data: () => ({member: 'm', date: '2026-11-04', entries: [{note: '內容', cat: 'doc'}]})}]
+    dailyReports: [{id: 'legacy', data: () => ({member: 'm', date: '2026-11-04', entries: [{note: '內容', cat: 'doc', branchId: 'stage4'}]})}],
+    trunks: [{id: 'laser', data: () => ({name: '雷射槍', branches: [{id: 'stage4', name: '雷射槍(第四階段_上架前)'}]})}]
   };
   const context = vm.createContext({
     window: {GamePMWeeklyReport: {connect: value => { app = value; }}},
@@ -164,7 +193,7 @@ test('HTML adapter requests both collections from the server and supports nested
     db: {collection(name) {
       const query = {
         where(...args) { calls.push([name, ...args]); return query; },
-        async get(options) { calls.push([name, options.source]); return {docs: docs[name]}; }
+        async get(options) { calls.push([name, options.source]); if (name === failCollection) throw new Error('projects unavailable'); return {docs: docs[name]}; }
       };
       return query;
     }}
@@ -176,9 +205,14 @@ test('HTML adapter requests both collections from the server and supports nested
   const data = await app.loadReports('2026-11-04', '2026-11-17');
   assert.deepEqual(calls, [
     ['members', 'server'], ['dailyReports', 'date', '>=', '2026-11-04'],
-    ['dailyReports', 'date', '<=', '2026-11-17'], ['dailyReports', 'server']
+    ['dailyReports', 'date', '<=', '2026-11-17'], ['dailyReports', 'server'], ['trunks', 'server']
   ]);
   assert.equal(data.members[0].name, '測試成員');
   assert.equal(data.reports[0].cat, '文件');
   assert.equal(data.reports[0].text, '內容');
+  assert.equal(data.reports[0].branch, 'stage4');
+  assert.equal(data.projects[0].id, 'laser');
+  assert.equal(data.projects[0].branches[0].name, '雷射槍(第四階段_上架前)');
+  failCollection = 'trunks';
+  await assert.rejects(app.loadReports('2026-11-04', '2026-11-17'), /projects unavailable/);
 });

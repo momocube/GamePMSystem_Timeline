@@ -1002,18 +1002,20 @@ function wireDailyItems(){
 const _origRerenderAll=rerenderAll;
 rerenderAll=function(){_origRerenderAll();refreshDaily();refreshAttachState()};
 </script>
-<script src="weekly-report.js?v=6d15cf1"></script>
+<script src="weekly-report.js?v=20261113-projects"></script>
 <script>
 if(window.GamePMWeeklyReport)window.GamePMWeeklyReport.connect({
   getCurrentUser:()=>currentUser,
   loadReports:async(start,end)=>{
-    const [memberSnapshot,reportSnapshot]=await Promise.all([
+    const [memberSnapshot,reportSnapshot,projectSnapshot]=await Promise.all([
       db.collection('members').get({source:'server'}),
-      db.collection('dailyReports').where('date','>=',start).where('date','<=',end).get({source:'server'})
+      db.collection('dailyReports').where('date','>=',start).where('date','<=',end).get({source:'server'}),
+      db.collection('trunks').get({source:'server'})
     ]);
     return {
       members:memberSnapshot.docs.map(doc=>{const data=doc.data();return {id:data.id||doc.id,name:data.name||'未命名成員',active:data.active!==false}}),
-      reports:migrateDailyDocs(reportSnapshot.docs.map(doc=>({...doc.data(),id:doc.id})))
+      reports:migrateDailyDocs(reportSnapshot.docs.map(doc=>({...doc.data(),id:doc.id}))),
+      projects:projectSnapshot.docs.map(doc=>{const data=doc.data();return {id:data.id||doc.id,name:data.name||'',branches:Array.isArray(data.branches)?data.branches.filter(Boolean).map(branch=>({id:branch.id,name:branch.name||''})):[]}})
     };
   },
   downloadBlob,

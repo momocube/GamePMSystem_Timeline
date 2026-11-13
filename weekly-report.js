@@ -36,7 +36,20 @@
     return iso + '（' + weekNames[new Date(iso + 'T00:00:00Z').getUTCDay()] + '）';
   }
 
-  function buildText({members = [], reports = [], now = new Date()}) {
+  function projectLabel(report, projects) {
+    const branchId = report.branch || report.branchId || '';
+    if (branchId) {
+      for (const project of projects) {
+        const branch = (project.branches || []).find(item => item.id === branchId);
+        if (branch && branch.name) return String(branch.name).trim();
+      }
+    }
+    const rootId = report.scheduleRootId || branchId;
+    const project = rootId && projects.find(item => item.id === rootId);
+    return project && project.name ? String(project.name).trim() : '';
+  }
+
+  function buildText({members = [], reports = [], projects = [], now = new Date()}) {
     const periods = getPeriods(now);
     // Match the active roster shown by the interface, preserving its member order.
     const roster = new Map(members.filter(member => member.active !== false).map(member => [member.id, member]));
@@ -65,7 +78,8 @@
         }
         entries.forEach(report => {
           const content = String(report.text || '（未填寫工作內容）').replace(/\r\n?/g, '\n').replace(/\n/g, '\n    ');
-          lines.push('  - ' + content);
+          const project = projectLabel(report, projects);
+          lines.push('  - ' + (project ? project + ' - ' : '') + content);
         });
         lines.push('');
       });
